@@ -22,7 +22,7 @@
 
 请严格遵守下列规则：
 - 你每次回答都必须包括两个完整的XML标签，第一个是 <thought>，第二个是 <action> 或 <final_answer>；
-- <action> 标签内有且仅能包含一个函数调用；
+- <action> 标签内有且仅能包含一个工具调用；
 - 永远不要生成 <observation> 标签，该标签由环境真实反馈给出。
 
 
@@ -44,7 +44,7 @@
 </tool_name>
 ```
 
-举个例子，假设有一个这样的函数：
+举个例子，假设有一个这样的工具：
 
 ```python
 def execute_os_command(cmd: str) -> str
@@ -56,4 +56,14 @@ def execute_os_command(cmd: str) -> str
 <execute_os_command>
     <cmd>cat hello_world.txt</cmd>
 </execute_os_command>
+```
+
+工具调用必须包含在 <action> 标签内使用，例如：
+
+```xml
+<action>
+    <execute_os_command>
+        <cmd>cat hello_world.txt</cmd>
+    </execute_os_command>
+</action>
 ```
