@@ -4,7 +4,6 @@ import json
 import platform
 import os
 import os.path as osp
-import re
 
 from bs4 import BeautifulSoup, Tag
 
