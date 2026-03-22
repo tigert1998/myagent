@@ -2,11 +2,24 @@ import argparse
 import requests
 import json
 import platform
+import os
 import os.path as osp
 import re
 import xml.etree.ElementTree as ET
 
 from tools import NATIVE_TOOLS_LIST
+
+
+class Logger:
+    def __init__(self, filename):
+        self.f = open(filename, "w")
+
+    def log(self, section, content):
+        self.f.write(json.dumps({"section": section, "content": content}))
+        self.f.flush()
+
+    def __del__(self):
+        self.f.close()
 
 
 def call_llm(config, messages, callback):
@@ -38,43 +51,45 @@ def call_llm(config, messages, callback):
                 callback(delta_reasoning_content, delta_content)
 
 
-def execute_action(action: str):
+def execute_action(action: str) -> str:
     tools_dic = {i["name"]: i["func"] for i in NATIVE_TOOLS_LIST}
 
     root = ET.fromstring(action)
-    for i in root:
-        tool_name = i.tag
-        dic = {}
-        for j in i:
-            argument_name = j.tag
-            argument_value = j.text
-            dic[argument_name] = argument_value
-        func = tools_dic[tool_name]
-
-        func_args_str = ",".join([f'{k}="{v}"' for k, v in dic.items()])
-        func_invoke_str = f"{tool_name}({func_args_str})"
-
-        node = ET.Element("observation")
-        node.text = f"工具调用：\n{func_invoke_str}\n\n工具调用结果：{func(**dic)}\n"
-        return ET.tostring(node)
+    i = root[0]
+    tool_name = i.tag
+    dic = {}
+    for j in i:
+        argument_name = j.tag
+        argument_value = j.text
+        dic[argument_name] = argument_value
+    func = tools_dic[tool_name]
+    func_args_str = ",".join([f'{k}="{v}"' for k, v in dic.items()])
+    func_invoke_str = f"{tool_name}({func_args_str})"
+    node = ET.Element("observation")
+    node.text = f"工具调用：\n{func_invoke_str}\n\n工具调用结果：{func(**dic)}\n"
+    return ET.tostring(node)
 
 
 def agent(config, question, log):
-    log_file = open(log, "w")
+    logger = Logger(log)
 
     with open(osp.join(osp.dirname(__file__), "agent_system_prompt.md"), "r") as f:
         agent_system_prompt = f.read()
     dic = {
         "os": platform.platform(),
         "tools_list": "\n\n".join([i["desc"] for i in NATIVE_TOOLS_LIST]),
+        "pwd": os.getcwd(),
     }
     agent_system_prompt = agent_system_prompt.format(**dic)
 
+    question_xml_node = ET.Element("question")
+    question_xml_node.text = question
     messages = [
         {"role": "system", "content": agent_system_prompt},
-        {"role": "user", "content": question},
+        {"role": "user", "content": ET.tostring(question_xml_node)},
     ]
-    log_file.write("【用户提问】\n" + question)
+    logger.log("用户提问", question)
+
     while True:
         content = ""
 
@@ -85,24 +100,22 @@ def agent(config, question, log):
 
         thought_match = re.search(r"<thought>(.*?)</thought>", content, re.DOTALL)
         thought = thought_match.group(1)
-        log_file.write("【思考】\n" + thought)
+        logger.log("思考", thought)
 
         final_answer_match = re.search(
             r"<final_answer>(.*?)</final_answer>", content, re.DOTALL
         )
         if final_answer_match is not None:
-            log_file.write("【最终答案】\n" + final_answer_match.group(1))
+            logger.log("最终答案", final_answer_match.group(1))
             break
 
         action_match = re.search(r"<action>(.*?)</action>", content, re.DOTALL)
         action = action_match.group(1)
-        log_file.write("【行动】\n" + action)
+        logger.log("行动", action)
 
         observation = execute_action(action)
-        log_file.write("【观察结果】\n" + observation)
+        logger.log("观察结果", observation)
         messages.append({"role": "user", "content": observation})
-
-    log_file.close()
 
 
 if __name__ == "__main__":
