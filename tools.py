@@ -22,25 +22,27 @@ def register(f):
 @register
 def read_file(path: str) -> str:
     """Read file from specific path into text.
-    Returns a serialized JSON object containing content (file content) and result ("success" or exception traceback)."""
+    Returns a serialized JSON object containing content (file content) and result ("success" or exception traceback).
+    """
     try:
         with open(path, "r") as f:
             content = f.read()
-        return json.dumps({"content": content, "result": "success"})
+        return json.dumps({"content": content, "result": "success"}, ensure_ascii=False)
     except Exception:
-        return json.dumps({"result": traceback.format_exc()})
+        return json.dumps({"result": traceback.format_exc()}, ensure_ascii=False)
 
 
 @register
 def write_to_file(path: str, content: str) -> str:
     """Write text content into specific path.
-    Returns a serialized JSON object containing the result ("success" or exception traceback)."""
+    Returns a serialized JSON object containing the result ("success" or exception traceback).
+    """
     try:
         with open(path, "w") as f:
             f.write(content)
-        return json.dumps({"result": "success"})
+        return json.dumps({"result": "success"}, ensure_ascii=False)
     except Exception:
-        return json.dumps({"result": traceback.format_exc()})
+        return json.dumps({"result": traceback.format_exc()}, ensure_ascii=False)
 
 
 @register
@@ -51,5 +53,10 @@ def execute_os_command(cmd: str) -> str:
         cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
     return json.dumps(
-        {"stdout": p.stdout, "stderr": p.stderr, "returncode": p.returncode}
+        {
+            "stdout": p.stdout.read(),
+            "stderr": p.stderr.read(),
+            "returncode": p.returncode,
+        },
+        ensure_ascii=False,
     )

@@ -5,7 +5,9 @@ import platform
 import os
 import os.path as osp
 import re
-import xml.etree.ElementTree as ET
+
+from bs4 import BeautifulSoup, Tag
+
 
 from tools import NATIVE_TOOLS_LIST
 
@@ -15,7 +17,10 @@ class Logger:
         self.f = open(filename, "w")
 
     def log(self, section, content):
-        self.f.write(json.dumps({"section": section, "content": content}))
+        self.f.write(
+            json.dumps({"section": section, "content": content}, ensure_ascii=False)
+            + "\n"
+        )
         self.f.flush()
 
     def __del__(self):
@@ -47,27 +52,34 @@ def call_llm(config, messages, callback):
                 delta_reasoning_content = chunk["choices"][0]["delta"].get(
                     "reasoning_content", ""
                 )
+                if delta_reasoning_content is None:
+                    delta_reasoning_content = ""
                 delta_content = chunk["choices"][0]["delta"].get("content", "")
+                if delta_content is None:
+                    delta_content = ""
                 callback(delta_reasoning_content, delta_content)
 
 
-def execute_action(action: str) -> str:
+def execute_action(action: Tag) -> str:
     tools_dic = {i["name"]: i["func"] for i in NATIVE_TOOLS_LIST}
 
-    root = ET.fromstring(action)
-    i = root[0]
-    tool_name = i.tag
+    root = action.find()
+    tool_name = root.name
     dic = {}
-    for j in i:
-        argument_name = j.tag
+    for j in root.children:
+        if not isinstance(j, Tag):
+            continue
+        argument_name = j.name
         argument_value = j.text
         dic[argument_name] = argument_value
     func = tools_dic[tool_name]
     func_args_str = ",".join([f'{k}="{v}"' for k, v in dic.items()])
     func_invoke_str = f"{tool_name}({func_args_str})"
-    node = ET.Element("observation")
-    node.text = f"工具调用：\n{func_invoke_str}\n\n工具调用结果：{func(**dic)}\n"
-    return ET.tostring(node)
+
+    soup = BeautifulSoup(features="xml")
+    node = soup.new_tag("observation")
+    node.string = f"工具调用：\n{func_invoke_str}\n\n工具调用结果：{func(**dic)}\n"
+    return str(node)
 
 
 def agent(config, question, log):
@@ -82,38 +94,40 @@ def agent(config, question, log):
     }
     agent_system_prompt = agent_system_prompt.format(**dic)
 
-    question_xml_node = ET.Element("question")
-    question_xml_node.text = question
+    soup = BeautifulSoup(features="xml")
+    node = soup.new_tag("question")
+    node.string = question
     messages = [
         {"role": "system", "content": agent_system_prompt},
-        {"role": "user", "content": ET.tostring(question_xml_node)},
+        {
+            "role": "user",
+            "content": str(node),
+        },
     ]
-    logger.log("用户提问", question)
+    logger.log("用户提问", str(node))
 
     while True:
+        reasoning_content = ""
         content = ""
 
         def callback(r, c):
+            nonlocal reasoning_content
+            nonlocal content
+            reasoning_content += r
             content += c
 
         call_llm(config, messages, callback)
 
-        thought_match = re.search(r"<thought>(.*?)</thought>", content, re.DOTALL)
-        thought = thought_match.group(1)
-        logger.log("思考", thought)
+        soup = BeautifulSoup(content, features="lxml")
+        logger.log("思考", str(soup.thought))
 
-        final_answer_match = re.search(
-            r"<final_answer>(.*?)</final_answer>", content, re.DOTALL
-        )
-        if final_answer_match is not None:
-            logger.log("最终答案", final_answer_match.group(1))
+        if soup.final_answer is not None:
+            logger.log("最终答案", str(soup.final_answer))
             break
 
-        action_match = re.search(r"<action>(.*?)</action>", content, re.DOTALL)
-        action = action_match.group(1)
-        logger.log("行动", action)
+        logger.log("行动", str(soup.action))
 
-        observation = execute_action(action)
+        observation = execute_action(soup.action)
         logger.log("观察结果", observation)
         messages.append({"role": "user", "content": observation})
 
