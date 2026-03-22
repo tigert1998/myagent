@@ -52,6 +52,7 @@ def execute_os_command(cmd: str) -> str:
     p = subprocess.Popen(
         cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
+    p.wait()
     return json.dumps(
         {
             "stdout": p.stdout.read(),
