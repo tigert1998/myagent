@@ -52,11 +52,11 @@ def execute_os_command(cmd: str) -> str:
     p = subprocess.Popen(
         cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
-    p.wait()
+    stdout, stderr = p.communicate()
     return json.dumps(
         {
-            "stdout": p.stdout.read(),
-            "stderr": p.stderr.read(),
+            "stdout": stdout,
+            "stderr": stderr,
             "returncode": p.returncode,
         },
         ensure_ascii=False,
