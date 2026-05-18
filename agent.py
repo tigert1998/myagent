@@ -48,6 +48,8 @@ def call_llm(config, messages, callback):
                 if json_data == "[DONE]":
                     break
                 chunk = json.loads(json_data)
+                if len(chunk["choices"]) == 0:
+                    break
                 delta_reasoning_content = chunk["choices"][0]["delta"].get(
                     "reasoning_content", ""
                 )
