@@ -38,7 +38,7 @@ class Agent:
                         break
                     chunk = json.loads(json_data)
                     if len(chunk["choices"]) == 0:
-                        break
+                        continue
                     delta_reasoning_content = chunk["choices"][0]["delta"].get(
                         "reasoning_content", ""
                     )
@@ -122,7 +122,7 @@ class ReActAgent(Agent):
 
             self.logger.log("行动", str(soup.action))
 
-            name, args = self.parse_action_tag(soup.action)
+            name, args = ReActAgent.parse_action_tag(soup.action)
             output = execute_tool(name, args)
             observation = ReActAgent.build_single_node_xml("observation", output)
 

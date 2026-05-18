@@ -1,11 +1,12 @@
 [project]
 name = "myagent"
 version = "0.1.0"
-description = "Add your description here"
+description = "My agent"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "bs4>=0.0.2",
     "lxml>=6.1.0",
+    "python-frontmatter>=1.2.0",
     "requests>=2.34.2",
 ]
