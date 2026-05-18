@@ -74,12 +74,10 @@ def execute_action(action: Tag) -> str:
         argument_value = j.text
         dic[argument_name] = argument_value
     func = tools_dic[tool_name]
-    func_args_str = ",".join([f'{k}="{v}"' for k, v in dic.items()])
-    func_invoke_str = f"{tool_name}({func_args_str})"
 
     soup = BeautifulSoup(features="xml")
     node = soup.new_tag("observation")
-    node.string = f"工具调用：\n{func_invoke_str}\n\n工具调用结果：{func(**dic)}\n"
+    node.string = f"{func(**dic)}\n"
     return str(node)
 
 
@@ -117,9 +115,12 @@ def agent(config, question, log):
             reasoning_content += r
             content += c
 
-        call_llm(config, messages, callback)
+        while True:
+            call_llm(config, messages, callback)
+            soup = BeautifulSoup(content, features="lxml")
+            if soup.thought is not None and (soup.action is not None or soup.final_answer is not None):
+                break
 
-        soup = BeautifulSoup(content, features="lxml")
         logger.log("思考", str(soup.thought))
 
         if soup.final_answer is not None:
@@ -130,6 +131,7 @@ def agent(config, question, log):
 
         observation = execute_action(soup.action)
         logger.log("观察结果", observation)
+        messages.append({"role": "assistant", "content": str(soup.thought) + str(soup.action)})
         messages.append({"role": "user", "content": observation})
 
 
