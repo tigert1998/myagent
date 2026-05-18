@@ -40,13 +40,13 @@ A skill is a reusable capability package for you, usually containing
 a `SKILL.md` file that describes what the skill does, when it should be used,
 and any related instructions or requirements.
 
-This tool scans all skills, extracts their metadata, and returns
+This tool scans all skills, extracts their frontmatter metadata, and returns
 a combined list of skill metadata for skill discovery and selection.
 """
 
     def invoke(self) -> str:
         ls = []
-        folder = osp.expanduser("~/.myagent/skills")
+        folder = osp.expanduser("~/.agents/skills")
         skills = os.listdir(folder)
         for skill in skills:
             skill_md_path = osp.join(folder, skill, "SKILL.md")
@@ -71,15 +71,71 @@ class LoadSkillTool:
 A skill contains detailed instructions, workflows, examples, or domain knowledge
 that help the agent perform a particular task. After discovering available skills
 through their metadata, this tool can be used to retrieve the complete content
-from the skill for execution or reference.
+from the skill's `SKILL.md` file for execution or reference.
 """
 
-    def invoke(self, name: str) -> str:
-        folder = osp.expanduser(osp.join("~/.myagent/skills", name))
+    def invoke(self, skill_name: str) -> str:
+        folder = osp.expanduser(osp.join("~/.agents/skills", skill_name))
         skill_md_path = osp.join(folder, "SKILL.md")
         with open(skill_md_path, "r") as f:
             md = frontmatter.load(f)
         return md.content
+
+
+class LoadSkillReferenceTool:
+    name = "load_skill_reference"
+
+    desc = """Load an additional reference file from a specific skill.
+
+Skills may include supplementary resources such as documentation, templates,
+examples, datasets, or configuration files alongside the main `SKILL.md`.
+This tool retrieves the content of a referenced file inside the skill directory
+so the agent can access supporting materials required for the task.
+"""
+
+    def invoke(self, skill_name: str, path: str) -> str:
+        folder = osp.expanduser(osp.join("~/.agents/skills", skill_name))
+        with open(osp.join(folder, path), "r") as f:
+            return f.read()
+
+
+class ExecuteSkillBashTool:
+    name = "execute_skill_bash"
+
+    desc = """Execute a bash command within the context of a specific skill.
+
+Skills may provide scripts, tools, or local resources that need to be executed
+from the command line. This tool runs a bash command with the skill directory
+exposed through the `CLAUDE_SKILL_DIR` environment variable, allowing commands
+to access files and resources bundled with the skill.
+
+The tool returns the command's standard output, standard error, and exit code.
+"""
+
+    def invoke(self, skill_name: str, cmd: str) -> str:
+        p = subprocess.Popen(
+            cmd,
+            shell=True,
+            executable="/bin/bash",
+            env={
+                **os.environ,
+                "CLAUDE_SKILL_DIR": osp.expanduser(
+                    osp.join("~/.agents/skills", skill_name)
+                ),
+            },
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        stdout, stderr = p.communicate()
+        return json.dumps(
+            {
+                "stdout": stdout,
+                "stderr": stderr,
+                "returncode": p.returncode,
+            },
+            ensure_ascii=False,
+        )
 
 
 def _register_tools():
@@ -88,6 +144,8 @@ def _register_tools():
         BashTool(),
         GetSkillsListTool(),
         LoadSkillTool(),
+        LoadSkillReferenceTool(),
+        ExecuteSkillBashTool(),
     ]
     for tool in tools:
         desc = f'def {tool.name}{inspect.signature(tool.invoke)}\n\t"""{tool.desc}"""\n\tpass\n'

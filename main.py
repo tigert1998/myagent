@@ -31,5 +31,11 @@ if __name__ == "__main__":
 
     logger = Logger(args.log)
 
-    agent = ReActAgent(config["url"], config["model"], config["key"], logger)
+    agent = ReActAgent(
+        config["url"],
+        config["model"],
+        config["key"],
+        config.get("other_configs", {}),
+        logger,
+    )
     agent.run(args.query)

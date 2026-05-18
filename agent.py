@@ -10,16 +10,18 @@ from tools import execute_tool, tools_list_desc
 
 
 class Agent:
-    def __init__(self, url, model, key):
+    def __init__(self, url, model, key, other_configs):
         self.url = url
         self.model = model
         self.key = key
+        self.other_configs = other_configs
 
     def call_llm(self, messages, callback):
         payload = {
             "model": self.model,
             "messages": messages,
             "stream": True,
+            **self.other_configs,
         }
         headers = {
             "Content-Type": "application/json",
@@ -51,8 +53,8 @@ class Agent:
 
 
 class ReActAgent(Agent):
-    def __init__(self, url, model, key, logger):
-        super().__init__(url, model, key)
+    def __init__(self, url, model, key, other_configs, logger):
+        super().__init__(url, model, key, other_configs)
 
         self.logger = logger
 
