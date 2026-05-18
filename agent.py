@@ -1,148 +1,133 @@
-import argparse
 import requests
 import json
 import platform
-import os
 import os.path as osp
+import os
 
 from bs4 import BeautifulSoup, Tag
 
-
-from tools import NATIVE_TOOLS_LIST
-
-
-class Logger:
-    def __init__(self, filename):
-        self.f = open(filename, "w")
-
-    def log(self, section, content):
-        self.f.write(
-            json.dumps({"section": section, "content": content}, ensure_ascii=False)
-            + "\n"
-        )
-        self.f.flush()
-
-    def __del__(self):
-        self.f.close()
+from tools import execute_tool, tools_list_desc
 
 
-def call_llm(config, messages, callback):
-    payload = {
-        "model": config["model"],
-        "messages": messages,
-        "stream": True,
-    }
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {config['key']}",
-    }
-    with requests.post(
-        config["url"], json=payload, headers=headers, stream=True
-    ) as response:
-        for line in response.iter_lines():
-            if not line:
+class Agent:
+    def __init__(self, url, model, key):
+        self.url = url
+        self.model = model
+        self.key = key
+
+    def call_llm(self, messages, callback):
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "stream": True,
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.key}",
+        }
+        with requests.post(
+            self.url, json=payload, headers=headers, stream=True
+        ) as response:
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                decoded_line = line.decode("utf-8")
+                if decoded_line.startswith("data:"):
+                    json_data = decoded_line[len("data:") :].strip()
+                    if json_data == "[DONE]":
+                        break
+                    chunk = json.loads(json_data)
+                    if len(chunk["choices"]) == 0:
+                        break
+                    delta_reasoning_content = chunk["choices"][0]["delta"].get(
+                        "reasoning_content", ""
+                    )
+                    if delta_reasoning_content is None:
+                        delta_reasoning_content = ""
+                    delta_content = chunk["choices"][0]["delta"].get("content", "")
+                    if delta_content is None:
+                        delta_content = ""
+                    callback(delta_reasoning_content, delta_content)
+
+
+class ReActAgent(Agent):
+    def __init__(self, url, model, key, logger):
+        super().__init__(url, model, key)
+
+        self.logger = logger
+
+    @staticmethod
+    def parse_action_tag(action: Tag):
+        root = action.find()
+        tool_name = root.name
+        dic = {}
+        for j in root.children:
+            if not isinstance(j, Tag):
                 continue
-            decoded_line = line.decode("utf-8")
-            if decoded_line.startswith("data:"):
-                json_data = decoded_line[len("data:") :].strip()
-                if json_data == "[DONE]":
-                    break
-                chunk = json.loads(json_data)
-                if len(chunk["choices"]) == 0:
-                    break
-                delta_reasoning_content = chunk["choices"][0]["delta"].get(
-                    "reasoning_content", ""
-                )
-                if delta_reasoning_content is None:
-                    delta_reasoning_content = ""
-                delta_content = chunk["choices"][0]["delta"].get("content", "")
-                if delta_content is None:
-                    delta_content = ""
-                callback(delta_reasoning_content, delta_content)
+            argument_name = j.name
+            argument_value = j.text
+            dic[argument_name] = argument_value
+        return tool_name, dic
 
+    @staticmethod
+    def build_single_node_xml(name, content):
+        soup = BeautifulSoup(features="xml")
+        node = soup.new_tag(name)
+        node.string = content
+        return node
 
-def execute_action(action: Tag) -> str:
-    tools_dic = {i["name"]: i["func"] for i in NATIVE_TOOLS_LIST}
+    def run(self, query):
+        with open(osp.join(osp.dirname(__file__), "react_prompt.md"), "r") as f:
+            react_prompt = f.read()
+        dic = {
+            "os": platform.platform(),
+            "tools_list": tools_list_desc(),
+            "pwd": os.getcwd(),
+        }
+        react_prompt = react_prompt.format(**dic)
 
-    root = action.find()
-    tool_name = root.name
-    dic = {}
-    for j in root.children:
-        if not isinstance(j, Tag):
-            continue
-        argument_name = j.name
-        argument_value = j.text
-        dic[argument_name] = argument_value
-    func = tools_dic[tool_name]
-
-    soup = BeautifulSoup(features="xml")
-    node = soup.new_tag("observation")
-    node.string = f"{func(**dic)}\n"
-    return str(node)
-
-
-def agent(config, question, log):
-    logger = Logger(log)
-
-    with open(osp.join(osp.dirname(__file__), "agent_system_prompt.md"), "r") as f:
-        agent_system_prompt = f.read()
-    dic = {
-        "os": platform.platform(),
-        "tools_list": "\n\n".join([i["desc"] for i in NATIVE_TOOLS_LIST]),
-        "pwd": os.getcwd(),
-    }
-    agent_system_prompt = agent_system_prompt.format(**dic)
-
-    soup = BeautifulSoup(features="xml")
-    node = soup.new_tag("question")
-    node.string = question
-    messages = [
-        {"role": "system", "content": agent_system_prompt},
-        {
-            "role": "user",
-            "content": str(node),
-        },
-    ]
-    logger.log("用户提问", str(node))
-
-    while True:
-        reasoning_content = ""
-        content = ""
-
-        def callback(r, c):
-            nonlocal reasoning_content
-            nonlocal content
-            reasoning_content += r
-            content += c
+        node = ReActAgent.build_single_node_xml("question", query)
+        messages = [
+            {"role": "system", "content": react_prompt},
+            {
+                "role": "user",
+                "content": str(node),
+            },
+        ]
+        self.logger.log("用户提问", str(node))
 
         while True:
-            call_llm(config, messages, callback)
-            soup = BeautifulSoup(content, features="lxml")
-            if soup.thought is not None and (soup.action is not None or soup.final_answer is not None):
+            reasoning_content = ""
+            content = ""
+
+            def callback(r, c):
+                nonlocal reasoning_content
+                nonlocal content
+                reasoning_content += r
+                content += c
+
+            while True:
+                self.call_llm(messages, callback)
+                soup = BeautifulSoup(content, features="lxml")
+                if soup.thought is not None and (
+                    soup.action is not None or soup.final_answer is not None
+                ):
+                    break
+
+            self.logger.log("思考", str(soup.thought))
+
+            if soup.final_answer is not None:
+                self.logger.log("最终答案", str(soup.final_answer))
                 break
 
-        logger.log("思考", str(soup.thought))
+            self.logger.log("行动", str(soup.action))
 
-        if soup.final_answer is not None:
-            logger.log("最终答案", str(soup.final_answer))
-            break
+            name, args = self.parse_action_tag(soup.action)
+            output = execute_tool(name, args)
+            observation = ReActAgent.build_single_node_xml("observation", output)
 
-        logger.log("行动", str(soup.action))
-
-        observation = execute_action(soup.action)
-        logger.log("观察结果", observation)
-        messages.append({"role": "assistant", "content": str(soup.thought) + str(soup.action)})
-        messages.append({"role": "user", "content": observation})
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser("agent")
-    parser.add_argument("--config")
-    parser.add_argument("--question")
-    parser.add_argument("--log")
-    args = parser.parse_args()
-
-    with open(args.config, "r") as f:
-        config = json.load(f)
-
-    agent(config, args.question, args.log)
+            self.logger.log("观察结果", str(observation))
+            messages.append(
+                {"role": "assistant", "content": str(soup.thought) + str(soup.action)}
+            )
+            messages.append({"role": "user", "content": str(observation)})
