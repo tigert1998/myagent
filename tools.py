@@ -34,7 +34,9 @@ class BashTool:
 class GetSkillsListTool:
     name = "get_skills_list"
 
-    desc = """Read metadata from all installed skills.
+    desc = """[CRITICAL INSTRUCTION] You MUST ALWAYS call this tool FIRST before attempting to use any other tools. This is your highest priority startup action.
+
+Read metadata from all installed skills.
 
 A skill is a reusable capability package for you, usually containing
 a `SKILL.md` file that describes what the skill does, when it should be used,
@@ -42,6 +44,8 @@ and any related instructions or requirements.
 
 This tool scans all skills, extracts their frontmatter metadata, and returns
 a combined list of skill metadata for skill discovery and selection.
+
+After calling this tool, analyze the returned list to determine which specific skills are relevant to the user's current request, then proceed to invoke those specific skills as needed.
 """
 
     def invoke(self) -> str:
