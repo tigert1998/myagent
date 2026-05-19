@@ -198,20 +198,31 @@ class PlanAndExecuteAgent(Agent):
         ]
         self.logger.log(self.name, "用户提问", str(node))
 
-        while True:
+        reasoning_content = ""
+        content = ""
+
+        def callback(r, c):
+            nonlocal reasoning_content
+            nonlocal content
+            reasoning_content += r
+            content += c
+
+        success = False
+        fail_reason = None
+        for _ in range(self.num_retries + 1):
             reasoning_content = ""
             content = ""
-
-            def callback(r, c):
-                nonlocal reasoning_content
-                nonlocal content
-                reasoning_content += r
-                content += c
-
             self.call_llm(messages, callback)
+
             soup = BeautifulSoup(content, features="lxml")
-            if soup.thought is not None or soup.plan is not None:
+            if soup.thought is not None and soup.plan is not None:
+                success = True
                 break
+            else:
+                fail_reason = f"Content format is incorrect:\n{content}"
+
+        if not success:
+            raise ValueError(fail_reason)
 
         self.logger.log(self.name, "思考", str(soup.thought))
         self.logger.log(self.name, "计划", str(soup.plan))
@@ -225,7 +236,7 @@ class PlanAndExecuteAgent(Agent):
         while True:
             planner_query = f"# 当前最终目标\n{query}\n# 已完成的子任务及结果\n"
             for i in range(len(steps_answers)):
-                planner_query += f"## 子任务 {i + 1}\n### 任务描述\n{steps[i]}\n### 执行结果\n{steps_answers[i]}\n"
+                planner_query += f"## 子任务 {i + 1}\n### 任务描述\n{steps[i]}\n### 执行结果\n```markdown\n{steps_answers[i]}\n```\n"
 
             new_steps = self._plan(planner_query)
             if len(new_steps) == 0:
@@ -244,7 +255,7 @@ class PlanAndExecuteAgent(Agent):
 
             react_agent_query = f"# 当前最终目标\n{query}\n# 已完成的子任务及结果\n"
             for i in range(len(steps_answers)):
-                react_agent_query += f"## 子任务 {i + 1}\n### 任务描述\n{steps[i]}\n### 执行结果\n{steps_answers[i]}\n"
+                react_agent_query += f"## 子任务 {i + 1}\n### 任务描述\n{steps[i]}\n### 执行结果\n```markdown\n{steps_answers[i]}\n```\n"
             react_agent_query += f"# 当前需要执行的任务\n{new_steps[0]}\n"
             react_agent_query += """# 执行要求
 

@@ -2,25 +2,7 @@ import argparse
 import json
 
 from agent import PlanAndExecuteAgent
-
-
-class Logger:
-    def __init__(self, filename):
-        self.f = open(filename, "w")
-
-    def log(self, agent, section, content):
-        self.f.write(
-            json.dumps(
-                {"agent": agent, "section": section, "content": content},
-                ensure_ascii=False,
-            )
-            + "\n"
-        )
-        self.f.flush()
-
-    def __del__(self):
-        self.f.close()
-
+from loggers import JsonlLogger, TerminalLogger
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("agent")
@@ -32,7 +14,7 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = json.load(f)
 
-    logger = Logger(args.log)
+    logger = JsonlLogger(args.log)
 
     agent = PlanAndExecuteAgent(
         "PlanAndExecuteAgent",
@@ -43,4 +25,6 @@ if __name__ == "__main__":
         logger,
         num_retries=3,
     )
-    agent.run(args.query)
+    answer = agent.run(args.query)
+
+    TerminalLogger.instance().prompt("Answer", answer)

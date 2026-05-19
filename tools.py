@@ -4,6 +4,8 @@ import inspect
 import os
 import os.path as osp
 
+from loggers import TerminalLogger
+
 import frontmatter
 
 
@@ -42,8 +44,8 @@ continue the task.
 """
 
     def invoke(self, question: str) -> str:
-        print(f"myagent wants your instruction: {question}")
-        return input("Your instruction: ")
+        TerminalLogger.instance().prompt("myagent asks", question)
+        return TerminalLogger.instance().prompt("Your instruction", None)
 
 
 class LoadSkillTool:
