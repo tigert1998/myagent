@@ -11,15 +11,32 @@ from bs4 import BeautifulSoup, Tag
 from tools import execute_tool, tools_list_desc
 
 
-class Agent:
-    def __init__(self, name, url, model, key, other_configs):
-        self.name = name
+class DeepSeekClient:
+    def __init__(self, url, model, key, other_configs):
         self.url = url
         self.model = model
         self.key = key
         self.other_configs = other_configs
 
-    def call_llm(self, messages, callback):
+    def call(self, messages):
+        messages = [{"role": m["role"], "content": m["content"]} for m in messages]
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            **self.other_configs,
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.key}",
+        }
+        response = requests.post(url=self.url, headers=headers, json=payload)
+        response.raise_for_status()
+        response_data = response.json()
+        message = response_data["choices"][0]["message"]
+        return message.get("reasoning_content", ""), message["content"]
+
+    def call_stream(self, messages, callback):
         messages = [{"role": m["role"], "content": m["content"]} for m in messages]
         payload = {
             "model": self.model,
@@ -67,20 +84,23 @@ class Agent:
                         raise ValueError(obj["error"]["message"])
 
 
+class Agent:
+    def __init__(self, name, llm_client):
+        self.name = name
+        self.llm_client = llm_client
+
+
 class ReActAgent(Agent):
     def __init__(
         self,
         name,
-        url,
-        model,
-        key,
-        other_configs,
+        llm_client,
         logger,
         num_retries,
         summarize_num=24,
         summarize_num_keep_latest=6,
     ):
-        super().__init__(name, url, model, key, other_configs)
+        super().__init__(name, llm_client)
 
         self.logger = logger
         self.num_retries = num_retries
@@ -126,20 +146,76 @@ class ReActAgent(Agent):
             },
         ]
 
-        reasoning_content = ""
-        content = ""
-
-        def callback(r, c):
-            nonlocal reasoning_content
-            nonlocal content
-            reasoning_content += r
-            content += c
-
-        self.call_llm(messages, callback)
-
+        _, content = self.llm_client.call(messages)
         summarization = ReActAgent._build_single_node_xml("summarization", content)
         self.logger.log(self.name, "阶段总结", str(summarization))
         return content
+
+    def _try_one_iter(self, messages):
+        _, content = self.llm_client.call(messages)
+
+        soup = BeautifulSoup(content, features="lxml")
+        if soup.action is None and soup.final_answer is None:
+            raise ValueError(f"Content format is incorrect:\n{content}")
+
+        if soup.thought is None:
+            thought = ReActAgent._build_single_node_xml("thought", "")
+        else:
+            thought = soup.thought
+
+        if soup.final_answer is not None:
+            self.logger.log(self.name, "思考", str(thought))
+            self.logger.log(self.name, "最终答案", str(soup.final_answer))
+            return messages, soup.final_answer.text
+
+        name, args = ReActAgent._parse_action_tag(soup.action)
+        try:
+            output, pin = execute_tool(name, args)
+        except:
+            output = traceback.format_exc()
+            pin = False
+
+        self.logger.log(self.name, "思考", str(thought))
+        self.logger.log(self.name, "行动", str(soup.action))
+        observation = ReActAgent._build_single_node_xml("observation", output)
+        self.logger.log(self.name, "观察结果", str(observation))
+        messages = messages + [
+            {
+                "role": "assistant",
+                "content": str(thought) + str(soup.action),
+                "meta": {"pin": pin},
+            },
+            {
+                "role": "user",
+                "content": str(observation),
+                "meta": {"pin": pin},
+            },
+        ]
+
+        if len(messages) >= self.summarize_num:
+            content = self._summarize(messages)
+            messages = [
+                m
+                for i, m in enumerate(messages)
+                if m["meta"]["pin"]
+                or (len(messages) - i <= self.summarize_num_keep_latest)
+            ] + [
+                {
+                    "role": "assistant",
+                    "content": content,
+                    "meta": {"pin": False},
+                }
+            ]
+
+        return messages, None
+
+    def _retry_one_iter(self, messages):
+        for _ in range(self.num_retries + 1):
+            try:
+                return self._try_one_iter(messages)
+            except:
+                exception = traceback.format_exc()
+        raise exception
 
     def run(self, query):
         with open(osp.join(osp.dirname(__file__), "prompts/react.md"), "r") as f:
@@ -167,89 +243,15 @@ class ReActAgent(Agent):
         ]
         self.logger.log(self.name, "用户提问", str(node))
 
-        reasoning_content = ""
-        content = ""
-
-        def callback(r, c):
-            nonlocal reasoning_content
-            nonlocal content
-            reasoning_content += r
-            content += c
-
         while True:
-            success = False
-            fail_reason = None
-
-            for _ in range(self.num_retries + 1):
-                reasoning_content = ""
-                content = ""
-                self.call_llm(messages, callback)
-
-                soup = BeautifulSoup(content, features="lxml")
-                if soup.action is None and soup.final_answer is None:
-                    fail_reason = f"Content format is incorrect:\n{content}"
-                    continue
-                if soup.thought is None:
-                    thought = ReActAgent._build_single_node_xml("thought", "")
-                else:
-                    thought = soup.thought
-
-                if soup.final_answer is not None:
-                    self.logger.log(self.name, "思考", str(thought))
-                    self.logger.log(self.name, "最终答案", str(soup.final_answer))
-                    return soup.final_answer.text
-
-                name, args = ReActAgent._parse_action_tag(soup.action)
-                try:
-                    output, pin = execute_tool(name, args)
-                except:
-                    output = traceback.format_exc()
-                    pin = False
-
-                self.logger.log(self.name, "思考", str(thought))
-                self.logger.log(self.name, "行动", str(soup.action))
-                observation = ReActAgent._build_single_node_xml("observation", output)
-                self.logger.log(self.name, "观察结果", str(observation))
-                messages.append(
-                    {
-                        "role": "assistant",
-                        "content": str(thought) + str(soup.action),
-                        "meta": {"pin": pin},
-                    }
-                )
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": str(observation),
-                        "meta": {"pin": pin},
-                    }
-                )
-
-                if len(messages) >= self.summarize_num:
-                    content = self._summarize(messages)
-                    messages = [
-                        m
-                        for i, m in enumerate(messages)
-                        if m["meta"]["pin"]
-                        or (len(messages) - i <= self.summarize_num_keep_latest)
-                    ] + [
-                        {
-                            "role": "assistant",
-                            "content": content,
-                            "meta": {"pin": False},
-                        }
-                    ]
-
-                success = True
-                break
-
-            if not success:
-                raise ValueError(fail_reason)
+            messages, final_answer = self._retry_one_iter(messages)
+            if final_answer is not None:
+                return final_answer
 
 
 class PlanAndExecuteAgent(Agent):
-    def __init__(self, name, url, model, key, other_configs, logger, num_retries):
-        super().__init__(name, url, model, key, other_configs)
+    def __init__(self, name, llm_client, logger, num_retries):
+        super().__init__(name, llm_client)
 
         self.logger = logger
         self.num_retries = num_retries
@@ -272,6 +274,21 @@ class PlanAndExecuteAgent(Agent):
             steps.append(j.text)
         return steps
 
+    def _try_one_iter(self, messages):
+        _, content = self.llm_client.call(messages)
+        soup = BeautifulSoup(content, features="lxml")
+        if soup.thought is not None and soup.plan is not None:
+            return soup.thought, soup.plan
+        raise ValueError(f"Content format is incorrect:\n{content}")
+
+    def _retry_one_iter(self, messages):
+        for _ in range(self.num_retries + 1):
+            try:
+                return self._try_one_iter(messages)
+            except:
+                exception = traceback.format_exc()
+        raise exception
+
     def _plan(self, query):
         with open(osp.join(osp.dirname(__file__), "prompts/planner.md"), "r") as f:
             planner_prompt = f.read()
@@ -292,37 +309,11 @@ class PlanAndExecuteAgent(Agent):
             },
         ]
         self.logger.log(self.name, "用户提问", str(node))
+        thought, plan = self._retry_one_iter(messages)
+        self.logger.log(self.name, "思考", str(thought))
+        self.logger.log(self.name, "计划", str(plan))
 
-        reasoning_content = ""
-        content = ""
-
-        def callback(r, c):
-            nonlocal reasoning_content
-            nonlocal content
-            reasoning_content += r
-            content += c
-
-        success = False
-        fail_reason = None
-        for _ in range(self.num_retries + 1):
-            reasoning_content = ""
-            content = ""
-            self.call_llm(messages, callback)
-
-            soup = BeautifulSoup(content, features="lxml")
-            if soup.thought is not None and soup.plan is not None:
-                success = True
-                break
-            else:
-                fail_reason = f"Content format is incorrect:\n{content}"
-
-        if not success:
-            raise ValueError(fail_reason)
-
-        self.logger.log(self.name, "思考", str(soup.thought))
-        self.logger.log(self.name, "计划", str(soup.plan))
-
-        return PlanAndExecuteAgent._parse_plan_tag(soup.plan)
+        return PlanAndExecuteAgent._parse_plan_tag(plan)
 
     def run(self, query):
         steps_answers = []
@@ -340,10 +331,7 @@ class PlanAndExecuteAgent(Agent):
             react_agent_id = len(steps) + 1
             react_agent = ReActAgent(
                 f"{self.name} - subagent #{react_agent_id}",
-                self.url,
-                self.model,
-                self.key,
-                self.other_configs,
+                self.llm_client,
                 self.logger,
                 self.num_retries,
             )

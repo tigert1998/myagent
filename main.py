@@ -1,7 +1,7 @@
 import argparse
 import json
 
-from agent import PlanAndExecuteAgent
+from agent import PlanAndExecuteAgent, DeepSeekClient
 from loggers import JsonlLogger, TerminalLogger
 
 if __name__ == "__main__":
@@ -18,10 +18,12 @@ if __name__ == "__main__":
 
     agent = PlanAndExecuteAgent(
         "PlanAndExecuteAgent",
-        config["url"],
-        config["model"],
-        config["key"],
-        config.get("other_configs", {}),
+        DeepSeekClient(
+            config["url"],
+            config["model"],
+            config["key"],
+            config.get("other_configs", {}),
+        ),
         logger,
         num_retries=3,
     )
