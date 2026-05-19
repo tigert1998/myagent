@@ -392,6 +392,8 @@
     </div>
 
     <script>
+        const domParser = new DOMParser();
+
         const logList = document.getElementById('logList');
         const summary = document.getElementById('summary');
         const fileInput = document.getElementById('fileInput');
@@ -403,67 +405,52 @@
         let allRecords = [];
         let currentSourceLabel = '';
 
-        // 修改后的最新内置示例
-        const demoText = `{"agent": "PlanAndExecuteAgent", "section": "用户提问", "content": "<question>用户提问</question>"}
+        let escapeHtml = (unsafe) => {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        let demoText = `{"agent": "PlanAndExecuteAgent", "section": "用户提问", "content": "<question>用户提问</question>"}
 {"agent": "PlanAndExecuteAgent", "section": "思考", "content": "<thought>思考</thought>"}
 {"agent": "PlanAndExecuteAgent", "section": "行动", "content": "<action><test_tool><cmd>ls -la</cmd></test_tool></action>"}
 {"agent": "PlanAndExecuteAgent", "section": "观察结果", "content": "<observation>观察</observation>"}
 {"agent": "PlanAndExecuteAgent", "section": "最终答案", "content": "<final_answer>最终答案</final_answer>"}
 {"agent": "PlanAndExecuteAgent", "section": "计划", "content": "<plan><step>第一步</step><step>第二步</step></plan>"}`;
 
-        function escapeHtml(str) {
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
-        }
+        let renderValue = (text) => {
+            let xmlDoc = domParser.parseFromString(text, "text/xml");
+            let root = xmlDoc.documentElement;
 
-        // 核心渲染逻辑
-        function renderValue(text, section) {
-            if (!text) return '';
+            if (['action'].includes(root.tagName)) {
+                const tool = root.firstElementChild;
 
-            // 辅助函数：剥离最外层的任意单一 XML 标签
-            const stripRootTag = (str) => {
-                const match = str.trim().match(/^<([a-zA-Z0-9_]+)[^>]*>([\s\S]*)<\/\1>$/i);
-                return match ? match[2].trim() : str.trim();
-            };
+                if (tool) {
+                    const toolName = tool.tagName;
+                    const params = [...tool.children]
+                        .map(param => `${param.tagName}=${JSON.stringify(param.textContent)}`)
+                        .join(',\n\t');
 
-            if (['行动'].includes(section)) {
-                const innerText = stripRootTag(text);
-                return `<div class="field-value code">${escapeHtml(innerText)}</div>`;
-            }
-
-            if (section === '计划') {
-                const innerText = stripRootTag(text);
-                const steps = [];
-                const stepRegex = /<step>([\s\S]*?)<\/step>/gi;
-                let match;
-                while ((match = stepRegex.exec(innerText)) !== null) {
-                    steps.push(match[1].trim());
+                    const actionDisplay = `${toolName}(\n\t${params}\n)`;
+                    return `<div class="field-value code">${escapeHtml(actionDisplay).trim()}</div>`;
                 }
 
-                if (steps.length > 0) {
-                    const listHtml = steps.map(s => `<li>${escapeHtml(s)}</li>`).join('');
-                    return `<div class="field-value"><ol style="margin: 0; padding-left: 20px;">${listHtml}</ol></div>`;
-                } else {
-                    return `<div class="field-value" style="white-space: pre-wrap;">${escapeHtml(innerText)}</div>`;
-                }
+                return `<div class="field-value code"></div>`;
             }
 
-            if (['用户提问', '思考', '观察结果', '阶段总结', '最终答案'].includes(section)) {
-                const innerText = stripRootTag(text);
-                // 确保 marked 已加载，用 markdown 格式渲染
-                if (typeof marked !== 'undefined') {
-                    return `<div class="field-value markdown-body">${marked.parse(innerText)}</div>`;
-                } else {
-                    // Fallback
-                    return `<div class="field-value" style="white-space: pre-wrap;">${escapeHtml(innerText)}</div>`;
-                }
+            if (['plan'].includes(root.tagName)) {
+                let steps = [...root.getElementsByTagName("step")];
+                const listHtml = steps.map(s => `<li>${s.textContent}</li>`).join('');
+                return `<div class="field-value"><ol style="margin: 0; padding-left: 20px;">${listHtml}</ol></div>`;
             }
 
-            // 默认渲染
+            if (['question', 'thought', 'observation', 'summarization', 'final_answer'].includes(root.tagName)) {
+                return `<div class="field-value markdown-body">${marked.parse(root.textContent)}</div>`;
+            }
+
             return `<div class="field-value" style="white-space: pre-wrap;">${escapeHtml(text)}</div>`;
         }
 
@@ -539,13 +526,12 @@
             logList.innerHTML = filtered.map((item, idx) => {
                 const section = item.section ?? '未命名';
                 const content = item.content ?? '';
-                const title = item.title ?? '';
                 const agent = item.agent ?? '未指定';
 
                 // 渲染除内置显式字段外的其它所有扩展字段（不再使用 section 做特殊渲染）
                 const extra = Object.entries(item)
-                    .filter(([k]) => !['section', 'content', 'title', 'agent'].includes(k))
-                    .map(([k, v]) => `<div class="field"><span class="field-label">${escapeHtml(k)}</span>${renderValue(typeof v === 'string' ? v : JSON.stringify(v, null, 2), k)}</div>`)
+                    .filter(([k]) => !['section', 'content', 'agent'].includes(k))
+                    .map(([k, v]) => `<div class="field"><span class="field-label">${escapeHtml(k)}</span>${renderValue(v)}</div>`)
                     .join('');
 
                 return `
@@ -555,13 +541,12 @@
                 <span class="index-badge">${idx + 1}</span>
                 <span class="agent-badge" style="${getAgentStyle(agent)}">Agent: ${escapeHtml(agent)}</span>
                 <span class="section-badge">${escapeHtml(section)}</span>
-                ${title ? `<strong>${escapeHtml(title)}</strong>` : ''}
               </div>
             </div>
             <div class="content">
               <div class="field">
                 <span class="field-label">内容</span>
-                ${renderValue(content, section)}
+                ${renderValue(content)}
               </div>
               ${extra ? `<details><summary>查看更多字段</summary><div style="margin-top:12px">${extra}</div></details>` : ''}
             </div>
