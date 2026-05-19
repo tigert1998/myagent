@@ -4,6 +4,7 @@ import platform
 import os.path as osp
 import os
 from datetime import datetime
+import traceback
 
 from bs4 import BeautifulSoup, Tag
 
@@ -19,6 +20,7 @@ class Agent:
         self.other_configs = other_configs
 
     def call_llm(self, messages, callback):
+        messages = [{"role": m["role"], "content": m["content"]} for m in messages]
         payload = {
             "model": self.model,
             "messages": messages,
@@ -66,11 +68,24 @@ class Agent:
 
 
 class ReActAgent(Agent):
-    def __init__(self, name, url, model, key, other_configs, logger, num_retries):
+    def __init__(
+        self,
+        name,
+        url,
+        model,
+        key,
+        other_configs,
+        logger,
+        num_retries,
+        summarize_num=24,
+        summarize_num_keep_latest=6,
+    ):
         super().__init__(name, url, model, key, other_configs)
 
         self.logger = logger
         self.num_retries = num_retries
+        self.summarize_num = summarize_num
+        self.summarize_num_keep_latest = summarize_num_keep_latest
 
     @staticmethod
     def _parse_action_tag(action: Tag):
@@ -92,6 +107,40 @@ class ReActAgent(Agent):
         node.string = content
         return node
 
+    def _summarize(self, history):
+        with open(osp.join(osp.dirname(__file__), "prompts/summarizer.md"), "r") as f:
+            summarizer_prompt = f.read()
+
+        dic = {
+            "os": platform.platform(),
+            "pwd": os.getcwd(),
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "history": json.dumps(history, indent=4),
+        }
+        summarizer_prompt = summarizer_prompt.format(**dic)
+
+        messages = [
+            {
+                "role": "user",
+                "content": summarizer_prompt,
+            },
+        ]
+
+        reasoning_content = ""
+        content = ""
+
+        def callback(r, c):
+            nonlocal reasoning_content
+            nonlocal content
+            reasoning_content += r
+            content += c
+
+        self.call_llm(messages, callback)
+
+        summarization = ReActAgent._build_single_node_xml("summarization", content)
+        self.logger.log(self.name, "阶段总结", str(summarization))
+        return content
+
     def run(self, query):
         with open(osp.join(osp.dirname(__file__), "prompts/react.md"), "r") as f:
             react_prompt = f.read()
@@ -105,10 +154,15 @@ class ReActAgent(Agent):
 
         node = ReActAgent._build_single_node_xml("question", query)
         messages = [
-            {"role": "system", "content": react_prompt},
+            {
+                "role": "system",
+                "content": react_prompt,
+                "meta": {"pin": True},
+            },
             {
                 "role": "user",
                 "content": str(node),
+                "meta": {"pin": True},
             },
         ]
         self.logger.log(self.name, "用户提问", str(node))
@@ -147,10 +201,10 @@ class ReActAgent(Agent):
 
                 name, args = ReActAgent._parse_action_tag(soup.action)
                 try:
-                    output = execute_tool(name, args)
+                    output, pin = execute_tool(name, args)
                 except:
-                    fail_reason = f"Fail to execute action:\n{str(soup.action)}"
-                    continue
+                    output = traceback.format_exc()
+                    pin = False
 
                 self.logger.log(self.name, "思考", str(thought))
                 self.logger.log(self.name, "行动", str(soup.action))
@@ -160,9 +214,32 @@ class ReActAgent(Agent):
                     {
                         "role": "assistant",
                         "content": str(thought) + str(soup.action),
+                        "meta": {"pin": pin},
                     }
                 )
-                messages.append({"role": "user", "content": str(observation)})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": str(observation),
+                        "meta": {"pin": pin},
+                    }
+                )
+
+                if len(messages) >= self.summarize_num:
+                    content = self._summarize(messages)
+                    messages = [
+                        m
+                        for i, m in enumerate(messages)
+                        if m["meta"]["pin"]
+                        or (len(messages) - i <= self.summarize_num_keep_latest)
+                    ] + [
+                        {
+                            "role": "assistant",
+                            "content": content,
+                            "meta": {"pin": False},
+                        }
+                    ]
+
                 success = True
                 break
 
@@ -196,9 +273,7 @@ class PlanAndExecuteAgent(Agent):
         return steps
 
     def _plan(self, query):
-        with open(
-            osp.join(osp.dirname(__file__), "prompts/plan_and_execute/planner.md"), "r"
-        ) as f:
+        with open(osp.join(osp.dirname(__file__), "prompts/planner.md"), "r") as f:
             planner_prompt = f.read()
 
         dic = {

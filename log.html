@@ -452,7 +452,7 @@
                 }
             }
 
-            if (['用户提问', '思考', '观察结果', '最终答案'].includes(section)) {
+            if (['用户提问', '思考', '观察结果', '阶段总结', '最终答案'].includes(section)) {
                 const innerText = stripRootTag(text);
                 // 确保 marked 已加载，用 markdown 格式渲染
                 if (typeof marked !== 'undefined') {

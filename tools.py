@@ -12,6 +12,7 @@ import frontmatter
 class BashTool:
     name = "bash"
     desc = "Execute the bash command. Returns stdout, stderr and returncode."
+    pin = False
 
     def invoke(self, cmd: str) -> str:
         p = subprocess.Popen(
@@ -47,6 +48,8 @@ This tool pauses the current workflow and waits for the user to provide
 instructions, missing information, confirmation, or feedback required to
 continue the task.
 """
+
+    pin = False
 
     def invoke(self, question: str) -> str:
         TerminalLogger.instance().prompt("myagent asks", question)
@@ -88,6 +91,8 @@ The list of skills:
             ls.append(metadata)
         return "\n\n".join(ls) + "\n"
 
+    pin = True
+
     def invoke(self, skill_name: str) -> str:
         folder = osp.expanduser(osp.join("~/.agents/skills", skill_name))
         skill_md_path = osp.join(folder, "SKILL.md")
@@ -107,6 +112,8 @@ This tool retrieves the content of a referenced file inside the skill directory
 so the agent can access supporting materials required for the task.
 """
 
+    pin = True
+
     def invoke(self, skill_name: str, path: str) -> str:
         folder = osp.expanduser(osp.join("~/.agents/skills", skill_name))
         with open(osp.join(folder, path), "r") as f:
@@ -125,6 +132,8 @@ to access files and resources bundled with the skill.
 
 The tool returns the command's standard output, standard error, and exit code.
 """
+
+    pin = False
 
     def invoke(self, skill_name: str, cmd: str) -> str:
         p = subprocess.Popen(
@@ -168,7 +177,14 @@ def _register_tools():
     ]
     for tool in tools:
         desc = f'def {tool.name}{inspect.signature(tool.invoke)}\n\t"""{tool.desc}"""\n\tpass\n'
-        ls.append({"name": tool.name, "desc": desc, "func": tool.invoke})
+        ls.append(
+            {
+                "name": tool.name,
+                "desc": desc,
+                "func": tool.invoke,
+                "pin": tool.pin,
+            }
+        )
     return ls
 
 
@@ -184,6 +200,6 @@ def execute_tool(name: str, args: dict):
         if name != tool["name"]:
             continue
         func = tool["func"]
-        return func(**args)
+        return func(**args), tool["pin"]
 
     raise ValueError(f'Invalid tool name "{name}"')
