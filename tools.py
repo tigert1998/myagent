@@ -56,6 +56,34 @@ continue the task.
         return TerminalLogger.instance().prompt("Your instruction", None)
 
 
+class InformUserTool:
+    name = "inform_user"
+
+    desc = """Send an informational message or progress update to the user.
+
+This tool is used to communicate important status updates, execution results,
+next steps, warnings, or other non-interactive messages during task execution.
+Unlike `ask_user`, this tool does not wait for a response and simply informs
+the user about the current state of the workflow.
+"""
+
+    pin = False
+
+    def invoke(self, content: str) -> str:
+        TerminalLogger.instance().prompt("MyAgent notice", content)
+        return (
+            "```json\n"
+            + json.dumps(
+                {
+                    "success": True,
+                },
+                indent=4,
+                ensure_ascii=False,
+            )
+            + "\n```\n"
+        )
+
+
 class LoadSkillTool:
     name = "load_skill"
 
@@ -170,6 +198,7 @@ def _register_tools():
     ls = []
     tools = [
         AskUserTool(),
+        InformUserTool(),
         BashTool(),
         LoadSkillTool(),
         LoadSkillReferenceTool(),
