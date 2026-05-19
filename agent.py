@@ -52,7 +52,11 @@ class Agent:
                         delta_content = ""
                     callback(delta_reasoning_content, delta_content)
                 else:
-                    obj = json.loads(decoded_line)
+                    try:
+                        obj = json.loads(decoded_line)
+                    except:
+                        continue
+
                     if (
                         obj.get("error") is not None
                         and obj["error"].get("message") is not None
@@ -243,7 +247,7 @@ class PlanAndExecuteAgent(Agent):
         while True:
             planner_query = f"# 当前最终目标\n{query}\n# 已完成的子任务及结果\n"
             for i in range(len(steps_answers)):
-                planner_query += f"## 子任务 {i + 1}\n### 任务描述\n{steps[i]}\n### 执行结果\n```markdown\n{steps_answers[i]}\n```\n"
+                planner_query += f"## 子任务 {i + 1}\n### 任务描述\n{steps[i]}\n### 执行结果\n````markdown\n{steps_answers[i]}\n````\n"
 
             new_steps = self._plan(planner_query)
             if len(new_steps) == 0:
@@ -262,7 +266,7 @@ class PlanAndExecuteAgent(Agent):
 
             react_agent_query = f"# 当前最终目标\n{query}\n# 已完成的子任务及结果\n"
             for i in range(len(steps_answers)):
-                react_agent_query += f"## 子任务 {i + 1}\n### 任务描述\n{steps[i]}\n### 执行结果\n```markdown\n{steps_answers[i]}\n```\n"
+                react_agent_query += f"## 子任务 {i + 1}\n### 任务描述\n{steps[i]}\n### 执行结果\n````markdown\n{steps_answers[i]}\n````\n"
             react_agent_query += f"# 当前需要执行的任务\n{new_steps[0]}\n"
             react_agent_query += """# 执行要求
 

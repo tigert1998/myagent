@@ -23,13 +23,18 @@ class BashTool:
             text=True,
         )
         stdout, stderr = p.communicate()
-        return json.dumps(
-            {
-                "stdout": stdout,
-                "stderr": stderr,
-                "returncode": p.returncode,
-            },
-            ensure_ascii=False,
+        return (
+            "```json\n"
+            + json.dumps(
+                {
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "returncode": p.returncode,
+                },
+                indent=4,
+                ensure_ascii=False,
+            )
+            + "\n```\n"
         )
 
 
@@ -137,13 +142,18 @@ The tool returns the command's standard output, standard error, and exit code.
             text=True,
         )
         stdout, stderr = p.communicate()
-        return json.dumps(
-            {
-                "stdout": stdout,
-                "stderr": stderr,
-                "returncode": p.returncode,
-            },
-            ensure_ascii=False,
+        return (
+            "```json\n"
+            + json.dumps(
+                {
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "returncode": p.returncode,
+                },
+                indent=4,
+                ensure_ascii=False,
+            )
+            + "\n```\n"
         )
 
 

@@ -5,6 +5,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>JSONL 日志展示</title>
+    <!-- 引入 marked.js 用于渲染 Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         :root {
             --bg: #f6f8fc;
@@ -244,7 +246,6 @@
         }
 
         .field-value {
-            white-space: pre-wrap;
             line-height: 1.7;
             font-size: 14px;
             background: #f8fafc;
@@ -259,6 +260,49 @@
             color: var(--code-text);
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             font-size: 13px;
+            white-space: pre-wrap;
+        }
+
+        /* Markdown 样式 */
+        .markdown-body {
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .markdown-body p {
+            margin: 0 0 10px 0;
+        }
+
+        .markdown-body p:last-child {
+            margin-bottom: 0;
+        }
+
+        .markdown-body pre {
+            background: var(--code-bg);
+            color: var(--code-text);
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+
+        .markdown-body code {
+            font-family: ui-monospace, SFMono-Regular, monospace;
+            background: rgba(0, 0, 0, 0.05);
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .markdown-body pre code {
+            background: transparent;
+            padding: 0;
+        }
+
+        .markdown-body ul,
+        .markdown-body ol {
+            margin: 0 0 10px 0;
+            padding-left: 24px;
         }
 
         details {
@@ -359,11 +403,13 @@
         let allRecords = [];
         let currentSourceLabel = '';
 
-        // 更新后的内置示例，加入了 agent 字段
-        const demoText = `{"agent": "RoutingAgent", "section": "用户提问", "content": "<question>查询常州供电公司的地址</question>"}
-{"agent": "ThoughtAgent", "section": "思考", "content": "<thought>\\n用户想查询常州供电公司的地址。我需要通过工具来获取这个信息。首先，我试试用Python来搜索这个信息。\\n</thought>"}
-{"agent": "ExecuteAgent", "section": "行动", "content": "<action>\\n<exec_python>\\n<code>\\nimport requests\\nfrom bs4 import BeautifulSoup\\nsearch_query = \\"常州供电公司 地址\\"\\nprint(\\"Fetching results...\\")\\n</code>\\n</exec_python>\\n</action>"}
-{"agent": "RoutingAgent", "section": "最终回复", "content": "常州供电公司地址位于：江苏省常州市天宁区晋陵中路353号。"}`;
+        // 修改后的最新内置示例
+        const demoText = `{"agent": "PlanAndExecuteAgent", "section": "用户提问", "content": "<question>用户提问</question>"}
+{"agent": "PlanAndExecuteAgent", "section": "思考", "content": "<thought>思考</thought>"}
+{"agent": "PlanAndExecuteAgent", "section": "行动", "content": "<action><test_tool><cmd>ls -la</cmd></test_tool></action>"}
+{"agent": "PlanAndExecuteAgent", "section": "观察结果", "content": "<observation>观察</observation>"}
+{"agent": "PlanAndExecuteAgent", "section": "最终答案", "content": "<final_answer>最终答案</final_answer>"}
+{"agent": "PlanAndExecuteAgent", "section": "计划", "content": "<plan><step>第一步</step><step>第二步</step></plan>"}`;
 
         function escapeHtml(str) {
             return String(str)
@@ -374,28 +420,61 @@
                 .replace(/'/g, '&#39;');
         }
 
-        function isCodeLike(text) {
-            return /<action>[\s\S]*<\/action>/.test(text);
-        }
+        // 核心渲染逻辑
+        function renderValue(text, section) {
+            if (!text) return '';
 
-        function renderValue(text) {
-            const escaped = escapeHtml(text);
-            if (isCodeLike(text)) {
-                return `<div class="field-value code">${escaped}</div>`;
+            // 辅助函数：剥离最外层的任意单一 XML 标签
+            const stripRootTag = (str) => {
+                const match = str.trim().match(/^<([a-zA-Z0-9_]+)[^>]*>([\s\S]*)<\/\1>$/i);
+                return match ? match[2].trim() : str.trim();
+            };
+
+            if (['行动'].includes(section)) {
+                const innerText = stripRootTag(text);
+                return `<div class="field-value code">${escapeHtml(innerText)}</div>`;
             }
-            return `<div class="field-value">${escaped}</div>`;
+
+            if (section === '计划') {
+                const innerText = stripRootTag(text);
+                const steps = [];
+                const stepRegex = /<step>([\s\S]*?)<\/step>/gi;
+                let match;
+                while ((match = stepRegex.exec(innerText)) !== null) {
+                    steps.push(match[1].trim());
+                }
+
+                if (steps.length > 0) {
+                    const listHtml = steps.map(s => `<li>${escapeHtml(s)}</li>`).join('');
+                    return `<div class="field-value"><ol style="margin: 0; padding-left: 20px;">${listHtml}</ol></div>`;
+                } else {
+                    return `<div class="field-value" style="white-space: pre-wrap;">${escapeHtml(innerText)}</div>`;
+                }
+            }
+
+            if (['用户提问', '思考', '观察结果', '最终答案'].includes(section)) {
+                const innerText = stripRootTag(text);
+                // 确保 marked 已加载，用 markdown 格式渲染
+                if (typeof marked !== 'undefined') {
+                    return `<div class="field-value markdown-body">${marked.parse(innerText)}</div>`;
+                } else {
+                    // Fallback
+                    return `<div class="field-value" style="white-space: pre-wrap;">${escapeHtml(innerText)}</div>`;
+                }
+            }
+
+            // 默认渲染
+            return `<div class="field-value" style="white-space: pre-wrap;">${escapeHtml(text)}</div>`;
         }
 
-        // 根据 Agent 字符串计算唯一的 HSL 颜色（保证高对比度和漂亮的质感）
+        // 根据 Agent 字符串计算唯一的 HSL 颜色
         function getAgentStyle(str) {
             if (!str) return 'background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;';
             let hash = 0;
             for (let i = 0; i < str.length; i++) {
                 hash = str.charCodeAt(i) + ((hash << 5) - hash);
             }
-            // 使用黄金角和素数乘子让颜色分布更均匀
             const h = Math.abs(hash * 137) % 360;
-            // 采用浅色背景（96%亮度）和深色文字（26%亮度）确保易读性
             return `background: hsl(${h}, 85%, 96%); color: hsl(${h}, 85%, 26%); border: 1px solid hsl(${h}, 60%, 86%);`;
         }
 
@@ -463,10 +542,10 @@
                 const title = item.title ?? '';
                 const agent = item.agent ?? '未指定';
 
-                // 渲染除内置显式字段外的其它所有扩展字段（把 agent 也排除在外）
+                // 渲染除内置显式字段外的其它所有扩展字段（不再使用 section 做特殊渲染）
                 const extra = Object.entries(item)
                     .filter(([k]) => !['section', 'content', 'title', 'agent'].includes(k))
-                    .map(([k, v]) => `<div class="field"><span class="field-label">${escapeHtml(k)}</span>${renderValue(typeof v === 'string' ? v : JSON.stringify(v, null, 2))}</div>`)
+                    .map(([k, v]) => `<div class="field"><span class="field-label">${escapeHtml(k)}</span>${renderValue(typeof v === 'string' ? v : JSON.stringify(v, null, 2), k)}</div>`)
                     .join('');
 
                 return `
@@ -482,7 +561,7 @@
             <div class="content">
               <div class="field">
                 <span class="field-label">内容</span>
-                ${renderValue(content)}
+                ${renderValue(content, section)}
               </div>
               ${extra ? `<details><summary>查看更多字段</summary><div style="margin-top:12px">${extra}</div></details>` : ''}
             </div>
