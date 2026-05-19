@@ -52,7 +52,7 @@ continue the task.
     pin = False
 
     def invoke(self, question: str) -> str:
-        TerminalLogger.instance().prompt("myagent asks", question)
+        TerminalLogger.instance().prompt("MyAgent asks", question)
         return TerminalLogger.instance().prompt("Your instruction", None)
 
 
