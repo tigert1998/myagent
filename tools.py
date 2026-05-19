@@ -31,6 +31,21 @@ class BashTool:
         )
 
 
+class AskUserTool:
+    name = "ask_user"
+
+    desc = """Request additional input or clarification directly from the user.
+
+This tool pauses the current workflow and waits for the user to provide
+instructions, missing information, confirmation, or feedback required to
+continue the task.
+"""
+
+    def invoke(self, question: str) -> str:
+        print(f"myagent wants your instruction: {question}")
+        return input("Your instruction: ")
+
+
 class LoadSkillTool:
     name = "load_skill"
 
@@ -133,6 +148,7 @@ The tool returns the command's standard output, standard error, and exit code.
 def _register_tools():
     ls = []
     tools = [
+        AskUserTool(),
         BashTool(),
         LoadSkillTool(),
         LoadSkillReferenceTool(),
