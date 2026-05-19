@@ -10,7 +10,8 @@ from tools import execute_tool, tools_list_desc
 
 
 class Agent:
-    def __init__(self, url, model, key, other_configs):
+    def __init__(self, name, url, model, key, other_configs):
+        self.name = name
         self.url = url
         self.model = model
         self.key = key
@@ -53,13 +54,14 @@ class Agent:
 
 
 class ReActAgent(Agent):
-    def __init__(self, url, model, key, other_configs, logger):
-        super().__init__(url, model, key, other_configs)
+    def __init__(self, name, url, model, key, other_configs, logger, num_retries):
+        super().__init__(name, url, model, key, other_configs)
 
         self.logger = logger
+        self.num_retries = num_retries
 
     @staticmethod
-    def parse_action_tag(action: Tag):
+    def _parse_action_tag(action: Tag):
         root = action.find()
         tool_name = root.name
         dic = {}
@@ -72,14 +74,14 @@ class ReActAgent(Agent):
         return tool_name, dic
 
     @staticmethod
-    def build_single_node_xml(name, content):
+    def _build_single_node_xml(name, content):
         soup = BeautifulSoup(features="xml")
         node = soup.new_tag(name)
         node.string = content
         return node
 
     def run(self, query):
-        with open(osp.join(osp.dirname(__file__), "react_prompt.md"), "r") as f:
+        with open(osp.join(osp.dirname(__file__), "prompts/react.md"), "r") as f:
             react_prompt = f.read()
         dic = {
             "os": platform.platform(),
@@ -88,7 +90,7 @@ class ReActAgent(Agent):
         }
         react_prompt = react_prompt.format(**dic)
 
-        node = ReActAgent.build_single_node_xml("question", query)
+        node = ReActAgent._build_single_node_xml("question", query)
         messages = [
             {"role": "system", "content": react_prompt},
             {
@@ -96,7 +98,105 @@ class ReActAgent(Agent):
                 "content": str(node),
             },
         ]
-        self.logger.log("用户提问", str(node))
+        self.logger.log(self.name, "用户提问", str(node))
+
+        reasoning_content = ""
+        content = ""
+
+        def callback(r, c):
+            nonlocal reasoning_content
+            nonlocal content
+            reasoning_content += r
+            content += c
+
+        while True:
+            success = False
+            fail_reason = None
+
+            for _ in range(self.num_retries + 1):
+                reasoning_content = ""
+                content = ""
+                self.call_llm(messages, callback)
+
+                soup = BeautifulSoup(content, features="lxml")
+                if soup.action is None and soup.final_answer is None:
+                    fail_reason = f"Content format is incorrect:\n{content}"
+                    continue
+                if soup.thought is None:
+                    thought = ReActAgent._build_single_node_xml("thought", "")
+                else:
+                    thought = soup.thought
+
+                if soup.final_answer is not None:
+                    self.logger.log(self.name, "思考", str(thought))
+                    self.logger.log(self.name, "最终答案", str(soup.final_answer))
+                    return soup.final_answer.text
+
+                name, args = ReActAgent._parse_action_tag(soup.action)
+                try:
+                    output = execute_tool(name, args)
+                except:
+                    fail_reason = f"Fail to execute action:\n{str(soup.action)}"
+                    continue
+
+                self.logger.log(self.name, "思考", str(thought))
+                self.logger.log(self.name, "行动", str(soup.action))
+                observation = ReActAgent._build_single_node_xml("observation", output)
+                self.logger.log(self.name, "观察结果", str(observation))
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": str(thought) + str(soup.action),
+                    }
+                )
+                messages.append({"role": "user", "content": str(observation)})
+                success = True
+                break
+
+            if not success:
+                raise ValueError(fail_reason)
+
+
+class PlanAndExecuteAgent(Agent):
+    def __init__(self, name, url, model, key, other_configs, logger, num_retries):
+        super().__init__(name, url, model, key, other_configs)
+
+        self.logger = logger
+        self.num_retries = num_retries
+
+    @staticmethod
+    def _build_single_node_xml(name, content):
+        soup = BeautifulSoup(features="xml")
+        node = soup.new_tag(name)
+        node.string = content
+        return node
+
+    @staticmethod
+    def _parse_plan_tag(plan: Tag):
+        steps = []
+        for j in plan.children:
+            if not isinstance(j, Tag):
+                continue
+            if j.name != "step":
+                continue
+            steps.append(j.text)
+        return steps
+
+    def _plan(self, query):
+        with open(
+            osp.join(osp.dirname(__file__), "prompts/plan_and_execute/planner.md"), "r"
+        ) as f:
+            planner_prompt = f.read()
+
+        node = PlanAndExecuteAgent._build_single_node_xml("question", query)
+        messages = [
+            {"role": "system", "content": planner_prompt},
+            {
+                "role": "user",
+                "content": str(node),
+            },
+        ]
+        self.logger.log(self.name, "用户提问", str(node))
 
         while True:
             reasoning_content = ""
@@ -108,28 +208,56 @@ class ReActAgent(Agent):
                 reasoning_content += r
                 content += c
 
-            while True:
-                self.call_llm(messages, callback)
-                soup = BeautifulSoup(content, features="lxml")
-                if soup.thought is not None and (
-                    soup.action is not None or soup.final_answer is not None
-                ):
-                    break
-
-            self.logger.log("思考", str(soup.thought))
-
-            if soup.final_answer is not None:
-                self.logger.log("最终答案", str(soup.final_answer))
+            self.call_llm(messages, callback)
+            soup = BeautifulSoup(content, features="lxml")
+            if soup.thought is not None or soup.plan is not None:
                 break
 
-            self.logger.log("行动", str(soup.action))
+        self.logger.log(self.name, "思考", str(soup.thought))
+        self.logger.log(self.name, "计划", str(soup.plan))
 
-            name, args = ReActAgent.parse_action_tag(soup.action)
-            output = execute_tool(name, args)
-            observation = ReActAgent.build_single_node_xml("observation", output)
+        return PlanAndExecuteAgent._parse_plan_tag(soup.plan)
 
-            self.logger.log("观察结果", str(observation))
-            messages.append(
-                {"role": "assistant", "content": str(soup.thought) + str(soup.action)}
+    def run(self, query):
+        steps_answers = []
+        steps = []
+
+        while True:
+            planner_query = f"# 当前最终目标\n{query}\n# 已完成的子任务及结果\n"
+            for i in range(len(steps_answers)):
+                planner_query += f"## 子任务 {i + 1}\n### 任务描述\n{steps[i]}\n### 执行结果\n{steps_answers[i]}\n"
+
+            new_steps = self._plan(planner_query)
+            if len(new_steps) == 0:
+                return steps_answers[-1]
+
+            react_agent_id = len(steps) + 1
+            react_agent = ReActAgent(
+                f"{self.name} - subagent #{react_agent_id}",
+                self.url,
+                self.model,
+                self.key,
+                self.other_configs,
+                self.logger,
+                self.num_retries,
             )
-            messages.append({"role": "user", "content": str(observation)})
+
+            react_agent_query = f"# 当前最终目标\n{query}\n# 已完成的子任务及结果\n"
+            for i in range(len(steps_answers)):
+                react_agent_query += f"## 子任务 {i + 1}\n### 任务描述\n{steps[i]}\n### 执行结果\n{steps_answers[i]}\n"
+            react_agent_query += f"# 当前需要执行的任务\n{new_steps[0]}\n"
+            react_agent_query += """# 执行要求
+
+请基于上述已完成任务的结果，继续推进当前任务。执行过程中应：
+
+1. 充分利用已有信息与已有执行结果；
+2. 避免重复分析、重复调用工具或重复执行相同步骤；
+3. 优先在现有上下文基础上完成当前任务；
+4. 若已有结果已包含部分所需信息，应直接复用并在其基础上继续推进。
+
+你当前仅需完成「当前需要执行的任务」，无需直接完成「最终目标」或额外扩展未要求的内容。
+"""
+
+            answer = react_agent.run(react_agent_query)
+            steps_answers.append(answer)
+            steps.append(new_steps[0])

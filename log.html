@@ -59,7 +59,7 @@
 
         .toolbar {
             display: flex;
-            gap: 10px;
+            gap: 12px;
             align-items: center;
             flex-wrap: wrap;
             padding: 14px;
@@ -97,6 +97,35 @@
 
         input[type="file"] {
             display: none;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #f1f5f9;
+            padding: 6px 12px;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+        }
+
+        .filter-group label {
+            font-size: 13px;
+            font-weight: 700;
+            color: #475569;
+        }
+
+        .filter-group select {
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            padding: 6px 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
+            outline: none;
+            cursor: pointer;
+            min-width: 140px;
         }
 
         .hint {
@@ -177,12 +206,21 @@
 
         .section-badge {
             display: inline-block;
-            padding: 6px 10px;
+            padding: 6px 12px;
             border-radius: 999px;
             background: #eff6ff;
             color: #1d4ed8;
             font-size: 12px;
             font-weight: 700;
+        }
+
+        .agent-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
         }
 
         .content {
@@ -281,7 +319,7 @@
         <div class="header">
             <div class="title">
                 <h1>JSONL 日志展示</h1>
-                <p>自动读取 <code>log.jsonl</code>，按记录分组展示每条日志内容。</p>
+                <p>自动读取 <code>log.jsonl</code>，按记录分组展示每条日志内容，支持按 Agent 筛选与色彩高亮。</p>
             </div>
         </div>
 
@@ -290,7 +328,15 @@
             <label class="file-label" for="fileInput">选择本地 JSONL 文件</label>
             <input id="fileInput" type="file" accept=".jsonl,.txt,.log,application/json,text/plain" />
             <button class="ghost" id="btnDemo">加载示例数据</button>
-            <span class="hint">提示：如直接双击打开页面，浏览器可能无法读取同目录文件，建议通过本地服务器访问。</span>
+
+            <div class="filter-group">
+                <label for="agentFilter">过滤 Agent:</label>
+                <select id="agentFilter">
+                    <option value="all">全部 Agent</option>
+                </select>
+            </div>
+
+            <span class="hint">提示：建议通过本地服务器访问以直接读取同目录文件。</span>
         </div>
 
         <div class="summary" id="summary"></div>
@@ -307,10 +353,17 @@
         const fileInput = document.getElementById('fileInput');
         const btnLoad = document.getElementById('btnLoad');
         const btnDemo = document.getElementById('btnDemo');
+        const agentFilter = document.getElementById('agentFilter');
 
-        const demoText = `{"section": "用户提问", "content": "<question>查询常州供电公司的地址</question>"}
-{"section": "思考", "content": "<thought>\\n用户想查询常州供电公司的地址。我需要通过工具来获取这个信息，例如执行网络搜索或调用相关API。首先，我试试用Python来搜索这个信息。\\n</thought>"}
-{"section": "行动", "content": "<action>\\n<exec_python>\\n<code>\\nimport requests\\nfrom bs4 import BeautifulSoup\\n\\nsearch_query = \\"常州供电公司 地址\\"\\nurl = f\\"https://www.baidu.com/s?wd={search_query}\\"\\nheaders = {\\"User-Agent\\": \\"Mozilla/5.0\\"}\\nresp = requests.get(url, headers=headers, timeout=10)\\nprint(resp.status_code)\\n</code>\\n</exec_python>\\n</action>"}`;
+        // 全局数据状态缓存
+        let allRecords = [];
+        let currentSourceLabel = '';
+
+        // 更新后的内置示例，加入了 agent 字段
+        const demoText = `{"agent": "RoutingAgent", "section": "用户提问", "content": "<question>查询常州供电公司的地址</question>"}
+{"agent": "ThoughtAgent", "section": "思考", "content": "<thought>\\n用户想查询常州供电公司的地址。我需要通过工具来获取这个信息。首先，我试试用Python来搜索这个信息。\\n</thought>"}
+{"agent": "ExecuteAgent", "section": "行动", "content": "<action>\\n<exec_python>\\n<code>\\nimport requests\\nfrom bs4 import BeautifulSoup\\nsearch_query = \\"常州供电公司 地址\\"\\nprint(\\"Fetching results...\\")\\n</code>\\n</exec_python>\\n</action>"}
+{"agent": "RoutingAgent", "section": "最终回复", "content": "常州供电公司地址位于：江苏省常州市天宁区晋陵中路353号。"}`;
 
         function escapeHtml(str) {
             return String(str)
@@ -333,25 +386,86 @@
             return `<div class="field-value">${escaped}</div>`;
         }
 
-        function renderRecords(records, sourceLabel = 'log.jsonl') {
-            const valid = records.filter(Boolean);
-            summary.innerHTML = `
-        <div class="card"><div class="metric-label">数据源</div><div class="metric-value" style="font-size:18px">${escapeHtml(sourceLabel)}</div></div>
-        <div class="card"><div class="metric-label">记录数</div><div class="metric-value">${valid.length}</div></div>
-        <div class="card"><div class="metric-label">状态</div><div class="metric-value">已加载</div></div>
-      `;
+        // 根据 Agent 字符串计算唯一的 HSL 颜色（保证高对比度和漂亮的质感）
+        function getAgentStyle(str) {
+            if (!str) return 'background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;';
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            // 使用黄金角和素数乘子让颜色分布更均匀
+            const h = Math.abs(hash * 137) % 360;
+            // 采用浅色背景（96%亮度）和深色文字（26%亮度）确保易读性
+            return `background: hsl(${h}, 85%, 96%); color: hsl(${h}, 85%, 26%); border: 1px solid hsl(${h}, 60%, 86%);`;
+        }
 
-            if (!valid.length) {
-                logList.innerHTML = '<div class="empty">没有可显示的日志。</div>';
+        // 处理新加载的数据流
+        function handleNewData(records, sourceLabel) {
+            allRecords = records.filter(Boolean);
+            currentSourceLabel = sourceLabel;
+
+            // 1. 收集并去重所有合法的 Agent
+            const agents = new Set();
+            allRecords.forEach(item => {
+                if (item && item.agent) {
+                    agents.add(item.agent);
+                }
+            });
+
+            // 2. 动态更新下拉选择框选项
+            agentFilter.innerHTML = '<option value="all">全部 Agent</option>';
+            agents.forEach(agent => {
+                const opt = document.createElement('option');
+                opt.value = agent;
+                opt.textContent = agent;
+                agentFilter.appendChild(opt);
+            });
+
+            // 3. 读取本地持久化缓存的过滤选择
+            const savedAgent = localStorage.getItem('selectedAgent') || 'all';
+            if (agents.has(savedAgent) || savedAgent === 'all') {
+                agentFilter.value = savedAgent;
+            } else {
+                agentFilter.value = 'all';
+                localStorage.setItem('selectedAgent', 'all');
+            }
+
+            // 4. 执行渲染
+            applyFilterAndRender();
+        }
+
+        // 过滤数据并渲染到界面上
+        function applyFilterAndRender() {
+            const selectedAgent = agentFilter.value;
+
+            const filteredRecords = selectedAgent === 'all'
+                ? allRecords
+                : allRecords.filter(item => item.agent === selectedAgent);
+
+            renderRecords(filteredRecords, allRecords.length, currentSourceLabel);
+        }
+
+        function renderRecords(filtered, totalCount, sourceLabel = 'log.jsonl') {
+            summary.innerHTML = `
+                <div class="card"><div class="metric-label">数据源</div><div class="metric-value" style="font-size:18px">${escapeHtml(sourceLabel)}</div></div>
+                <div class="card"><div class="metric-label">记录数 (过滤/总计)</div><div class="metric-value">${filtered.length} / ${totalCount}</div></div>
+                <div class="card"><div class="metric-label">状态</div><div class="metric-value">已加载</div></div>
+            `;
+
+            if (!filtered.length) {
+                logList.innerHTML = '<div class="empty">没有匹配当前过滤条件的日志。</div>';
                 return;
             }
 
-            logList.innerHTML = valid.map((item, idx) => {
+            logList.innerHTML = filtered.map((item, idx) => {
                 const section = item.section ?? '未命名';
                 const content = item.content ?? '';
                 const title = item.title ?? '';
+                const agent = item.agent ?? '未指定';
+
+                // 渲染除内置显式字段外的其它所有扩展字段（把 agent 也排除在外）
                 const extra = Object.entries(item)
-                    .filter(([k]) => !['section', 'content', 'title'].includes(k))
+                    .filter(([k]) => !['section', 'content', 'title', 'agent'].includes(k))
                     .map(([k, v]) => `<div class="field"><span class="field-label">${escapeHtml(k)}</span>${renderValue(typeof v === 'string' ? v : JSON.stringify(v, null, 2))}</div>`)
                     .join('');
 
@@ -360,6 +474,7 @@
             <div class="log-head">
               <div class="log-head-left">
                 <span class="index-badge">${idx + 1}</span>
+                <span class="agent-badge" style="${getAgentStyle(agent)}">Agent: ${escapeHtml(agent)}</span>
                 <span class="section-badge">${escapeHtml(section)}</span>
                 ${title ? `<strong>${escapeHtml(title)}</strong>` : ''}
               </div>
@@ -413,7 +528,7 @@
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const text = await res.text();
                 const { records, errors } = parseJsonl(text);
-                renderRecords(records, url);
+                handleNewData(records, url);
                 if (errors.length) showErrors(errors);
             } catch (err) {
                 logList.innerHTML = '<div class="empty">无法直接读取 log.jsonl。你可以通过本地服务器打开页面，或使用“选择本地 JSONL 文件”。</div>';
@@ -425,6 +540,12 @@
             }
         }
 
+        // 监听下拉选择变更事件并记住选择
+        agentFilter.addEventListener('change', (e) => {
+            localStorage.setItem('selectedAgent', e.target.value);
+            applyFilterAndRender();
+        });
+
         btnLoad.addEventListener('click', () => loadFromUrl('log.jsonl'));
 
         fileInput.addEventListener('change', async (e) => {
@@ -432,17 +553,18 @@
             if (!file) return;
             const text = await file.text();
             const { records, errors } = parseJsonl(text);
-            renderRecords(records, file.name);
+            handleNewData(records, file.name);
             if (errors.length) showErrors(errors);
         });
 
         btnDemo.addEventListener('click', () => {
             const { records, errors } = parseJsonl(demoText);
-            renderRecords(records, '内置示例');
+            handleNewData(records, '内置示例');
             if (errors.length) showErrors(errors);
         });
 
-        loadFromUrl('log.jsonl');
+        // 首次挂载运行
+        loadFromUrl('./log.jsonl');
     </script>
 </body>
 

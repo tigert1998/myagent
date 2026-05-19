@@ -1,16 +1,19 @@
 import argparse
 import json
 
-from agent import ReActAgent
+from agent import PlanAndExecuteAgent
 
 
 class Logger:
     def __init__(self, filename):
         self.f = open(filename, "w")
 
-    def log(self, section, content):
+    def log(self, agent, section, content):
         self.f.write(
-            json.dumps({"section": section, "content": content}, ensure_ascii=False)
+            json.dumps(
+                {"agent": agent, "section": section, "content": content},
+                ensure_ascii=False,
+            )
             + "\n"
         )
         self.f.flush()
@@ -31,11 +34,13 @@ if __name__ == "__main__":
 
     logger = Logger(args.log)
 
-    agent = ReActAgent(
+    agent = PlanAndExecuteAgent(
+        "PlanAndExecuteAgent",
         config["url"],
         config["model"],
         config["key"],
         config.get("other_configs", {}),
         logger,
+        num_retries=3,
     )
     agent.run(args.query)
