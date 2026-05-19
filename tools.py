@@ -31,24 +31,24 @@ class BashTool:
         )
 
 
-class GetSkillsListTool:
-    name = "get_skills_list"
+class LoadSkillTool:
+    name = "load_skill"
 
-    desc = """[CRITICAL INSTRUCTION] You MUST ALWAYS call this tool FIRST before attempting to use any other tools. This is your highest priority startup action.
+    @property
+    def desc(self) -> str:
+        return """Load the full content of a specific skill by name.
 
-Read metadata from all installed skills.
+A skill is a reusable capability package that typically includes a `SKILL.md` file
+describing what the skill does, when it should be used, and any related instructions or requirements.
+It contains detailed workflows, examples, domain knowledge,
+or execution guidance that help the agent perform specific tasks.
+You can retrieve and reference the full contents of the skill’s `SKILL.md` file
+for execution or further guidance.
 
-A skill is a reusable capability package for you, usually containing
-a `SKILL.md` file that describes what the skill does, when it should be used,
-and any related instructions or requirements.
+The list of skills:
+""" + self.list_of_skills()
 
-This tool scans all skills, extracts their frontmatter metadata, and returns
-a combined list of skill metadata for skill discovery and selection.
-
-After calling this tool, analyze the returned list to determine which specific skills are relevant to the user's current request, then proceed to invoke those specific skills as needed.
-"""
-
-    def invoke(self) -> str:
+    def list_of_skills(self) -> str:
         ls = []
         folder = osp.expanduser("~/.agents/skills")
         skills = os.listdir(folder)
@@ -64,19 +64,7 @@ After calling this tool, analyze the returned list to determine which specific s
                 + "\n---\n"
             )
             ls.append(metadata)
-        return "\n\n".join(ls)
-
-
-class LoadSkillTool:
-    name = "load_skill"
-
-    desc = """Load the full content of a specific skill by name.
-
-A skill contains detailed instructions, workflows, examples, or domain knowledge
-that help the agent perform a particular task. After discovering available skills
-through their metadata, this tool can be used to retrieve the complete content
-from the skill's `SKILL.md` file for execution or reference.
-"""
+        return "\n\n".join(ls) + "\n"
 
     def invoke(self, skill_name: str) -> str:
         folder = osp.expanduser(osp.join("~/.agents/skills", skill_name))
@@ -146,7 +134,6 @@ def _register_tools():
     ls = []
     tools = [
         BashTool(),
-        GetSkillsListTool(),
         LoadSkillTool(),
         LoadSkillReferenceTool(),
         ExecuteSkillBashTool(),
