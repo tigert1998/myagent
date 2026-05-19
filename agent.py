@@ -3,6 +3,7 @@ import json
 import platform
 import os.path as osp
 import os
+from datetime import datetime
 
 from bs4 import BeautifulSoup, Tag
 
@@ -96,8 +97,9 @@ class ReActAgent(Agent):
             react_prompt = f.read()
         dic = {
             "os": platform.platform(),
-            "tools_list": tools_list_desc(),
             "pwd": os.getcwd(),
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "tools_list": tools_list_desc(),
         }
         react_prompt = react_prompt.format(**dic)
 
@@ -198,6 +200,13 @@ class PlanAndExecuteAgent(Agent):
             osp.join(osp.dirname(__file__), "prompts/plan_and_execute/planner.md"), "r"
         ) as f:
             planner_prompt = f.read()
+
+        dic = {
+            "os": platform.platform(),
+            "pwd": os.getcwd(),
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        planner_prompt = planner_prompt.format(**dic)
 
         node = PlanAndExecuteAgent._build_single_node_xml("question", query)
         messages = [
