@@ -51,6 +51,13 @@ class Agent:
                     if delta_content is None:
                         delta_content = ""
                     callback(delta_reasoning_content, delta_content)
+                else:
+                    obj = json.loads(decoded_line)
+                    if (
+                        obj.get("error") is not None
+                        and obj["error"].get("message") is not None
+                    ):
+                        raise ValueError(obj["error"]["message"])
 
 
 class ReActAgent(Agent):
