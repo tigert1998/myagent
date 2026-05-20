@@ -95,7 +95,7 @@ class LoadSkillTool:
 
     @property
     def desc(self) -> str:
-        return """Load the `SKILL.md` of a specific skill by name.
+        return f"""Load the `SKILL.md` of a specific skill by name.
 
 A skill is a reusable capability package that typically includes a `SKILL.md` file
 describing what the skill does, when it should be used, and any related instructions or requirements.
@@ -105,7 +105,9 @@ You can retrieve and reference the full contents of the skill’s `SKILL.md` fil
 for execution or further guidance.
 
 The list of skills:
-""" + self.list_of_skills()
+
+{self.list_of_skills()}
+"""
 
     def list_of_skills(self) -> str:
         ls = []
@@ -122,7 +124,8 @@ The list of skills:
                 + "\n".join([f"{k}: {v}" for k, v in md.metadata.items()])
                 + "\n---\n"
             )
-            ls.append(metadata)
+            skill_path = osp.join(folder, skill)
+            ls.append(f"{skill_path}\n{metadata}")
         return "\n\n".join(ls) + "\n"
 
     pin = True
@@ -136,32 +139,12 @@ The list of skills:
         return content
 
 
-class LoadSkillReferenceTool:
-    name = "load_skill_reference"
-
-    desc = """Load an additional reference file from a specific skill.
-
-Skills may include supplementary resources such as documentation, templates,
-examples, datasets, or configuration files alongside the main `SKILL.md`.
-This tool retrieves the content of a referenced file inside the skill directory
-so the agent can access supporting materials required for the task.
-"""
-
-    pin = True
-
-    def invoke(self, skill_name: str, path: str) -> str:
-        folder = osp.expanduser(osp.join("~/.agents/skills", skill_name))
-        with open(osp.join(folder, path), "r") as f:
-            return _skill_doc_inject_envs(f.read(), folder)
-
-
 def _register_tools():
     ls = []
     tools = [
         AskUserTool(),
         NotifyUserTool(),
         LoadSkillTool(),
-        LoadSkillReferenceTool(),
         BashTool(),
     ]
     for tool in tools:

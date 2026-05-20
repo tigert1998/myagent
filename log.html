@@ -429,12 +429,13 @@
                 const tool = root.firstElementChild;
 
                 if (tool) {
+                    let spaces = "    ";
                     const toolName = tool.tagName;
                     const params = [...tool.children]
                         .map(param => `${param.tagName}=${JSON.stringify(param.textContent)}`)
-                        .join(',\n\t');
+                        .join(`,\n${spaces}`);
 
-                    const actionDisplay = `${toolName}(\n\t${params}\n)`;
+                    const actionDisplay = `${toolName}(\n${spaces}${params}\n)`;
                     return `<div class="field-value code">${escapeHtml(actionDisplay).trim()}</div>`;
                 }
 
