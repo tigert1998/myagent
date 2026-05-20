@@ -39,8 +39,12 @@ class DiscordChannel:
 
     def request_msg(self):
         async def get_next_user_message():
-            def check(m):
-                return m.channel.id == self.channel.id and m.author != self.client.user
+            def check(m: discord.Message):
+                return (
+                    m.channel.id == self.channel.id
+                    and m.author != self.client.user
+                    and self.client.user in m.mentions
+                )
 
             msg = await self.client.wait_for("message", check=check)
             return msg.content
@@ -57,8 +61,11 @@ class DiscordChannel:
             )
             future.result()
 
-    async def on_message(self, message):
-        if message.author == self.client.user:
+    async def on_message(self, message: discord.Message):
+        if (
+            message.author == self.client.user
+            or self.client.user not in message.mentions
+        ):
             return
 
         if self.agent_running:
