@@ -2,27 +2,38 @@ import argparse
 import json
 
 from myagent.llm_client import LLMClient
+from myagent.tools import ToolsList
 from myagent.agent import PlanAndExecuteAgent, ReActAgent
 from myagent.loggers import JsonlLogger, TerminalLogger
 
+
+def send_msg(content):
+    TerminalLogger.instance().prompt("MyAgent updates", content)
+
+
+def request_msg():
+    return TerminalLogger.instance().prompt("User replies", None)
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser("MyAgent")
+    parser = argparse.ArgumentParser("MyAgent console")
     parser.add_argument("--config")
     parser.add_argument("--query")
-    parser.add_argument("--log")
     parser.add_argument("--plan-mode", action="store_true")
     args = parser.parse_args()
 
     with open(args.config, "r") as f:
         config = json.load(f)
-    llm_client = LLMClient.build(config)
+    llm_client = LLMClient.build(config["llm"])
+    tools_list = ToolsList(send_msg, request_msg)
 
-    logger = JsonlLogger(args.log)
+    logger = JsonlLogger(config["log"])
 
     if args.plan_mode:
         agent = PlanAndExecuteAgent(
             "PlanAndExecuteAgent",
             llm_client,
+            tools_list,
             logger,
             num_retries=3,
         )
@@ -30,6 +41,7 @@ if __name__ == "__main__":
         agent = ReActAgent(
             "ReActAgent",
             llm_client,
+            tools_list,
             logger,
             num_retries=3,
         )

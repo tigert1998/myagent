@@ -53,9 +53,13 @@ continue the task.
 
     pin = False
 
+    def __init__(self, send_msg, request_msg):
+        self.send_msg = send_msg
+        self.request_msg = request_msg
+
     def invoke(self, question: str) -> str:
-        TerminalLogger.instance().prompt("MyAgent asks", question)
-        return TerminalLogger.instance().prompt("User replies", None)
+        self.send_msg(question)
+        return self.request_msg()
 
 
 class NotifyUserTool:
@@ -71,8 +75,11 @@ the user about the current state of the workflow.
 
     pin = False
 
+    def __init__(self, send_msg):
+        self.send_msg = send_msg
+
     def invoke(self, content: str) -> str:
-        TerminalLogger.instance().prompt("MyAgent updates", content)
+        self.send_msg(content)
         return (
             "```json\n"
             + json.dumps(
@@ -139,39 +146,41 @@ The list of skills:
         return content
 
 
-def _register_tools():
-    ls = []
-    tools = [
-        AskUserTool(),
-        NotifyUserTool(),
-        LoadSkillTool(),
-        BashTool(),
-    ]
-    for tool in tools:
-        desc = f'def {tool.name}{inspect.signature(tool.invoke)}\n\t"""{tool.desc}"""\n\tpass\n'
-        ls.append(
-            {
-                "name": tool.name,
-                "desc": desc,
-                "func": tool.invoke,
-                "pin": tool.pin,
-            }
+class ToolsList:
+    @staticmethod
+    def _register_tools(send_msg, request_msg):
+        ls = []
+        tools = [
+            AskUserTool(send_msg, request_msg),
+            NotifyUserTool(send_msg),
+            LoadSkillTool(),
+            BashTool(),
+        ]
+        for tool in tools:
+            desc = f'def {tool.name}{inspect.signature(tool.invoke)}\n\t"""{tool.desc}"""\n\tpass\n'
+            ls.append(
+                {
+                    "name": tool.name,
+                    "desc": desc,
+                    "func": tool.invoke,
+                    "pin": tool.pin,
+                }
+            )
+        return ls
+
+    def __init__(self, send_msg, request_msg):
+        self._tools_list = ToolsList._register_tools(send_msg, request_msg)
+
+    def tools_list_desc(self):
+        return (
+            "```python\n" + "\n\n".join([i["desc"] for i in self._tools_list]) + "```"
         )
-    return ls
 
+    def execute_tool(self, name: str, args: dict):
+        for tool in self._tools_list:
+            if name != tool["name"]:
+                continue
+            func = tool["func"]
+            return func(**args), tool["pin"]
 
-_tools_list = _register_tools()
-
-
-def tools_list_desc():
-    return "```python\n" + "\n\n".join([i["desc"] for i in _tools_list]) + "```"
-
-
-def execute_tool(name: str, args: dict):
-    for tool in _tools_list:
-        if name != tool["name"]:
-            continue
-        func = tool["func"]
-        return func(**args), tool["pin"]
-
-    raise ValueError(f'Invalid tool name "{name}"')
+        raise ValueError(f'Invalid tool name "{name}"')

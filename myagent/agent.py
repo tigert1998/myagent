@@ -6,13 +6,15 @@ import traceback
 
 from bs4 import BeautifulSoup, Tag
 
-from myagent.tools import execute_tool, tools_list_desc
+from myagent.tools import ToolsList
+from myagent.llm_client import LLMClient
 
 
 class Agent:
-    def __init__(self, name, llm_client):
+    def __init__(self, name, llm_client: LLMClient, tools_list: ToolsList):
         self.name = name
         self.llm_client = llm_client
+        self.tools_list = tools_list
 
 
 class ReActAgent(Agent):
@@ -20,12 +22,13 @@ class ReActAgent(Agent):
         self,
         name,
         llm_client,
+        tools_list,
         logger,
         num_retries,
         summarize_num=64,
         summarize_keep_latest_num=8,
     ):
-        super().__init__(name, llm_client)
+        super().__init__(name, llm_client, tools_list)
 
         self.logger = logger
         self.num_retries = num_retries
@@ -95,7 +98,7 @@ class ReActAgent(Agent):
 
         name, args = ReActAgent._parse_action_tag(soup.action)
         try:
-            output, pin = execute_tool(name, args)
+            output, pin = self.tools_list.execute_tool(name, args)
         except:
             output = traceback.format_exc()
             pin = False
@@ -149,7 +152,7 @@ class ReActAgent(Agent):
             "os": platform.platform(),
             "pwd": os.getcwd(),
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "tools_list": tools_list_desc(),
+            "tools_list": self.tools_list.tools_list_desc(),
         }
         react_prompt = react_prompt.format(**dic)
 
@@ -171,13 +174,13 @@ class ReActAgent(Agent):
         while True:
             messages, final_answer = self._retry_one_iter(messages)
             if final_answer is not None:
-                execute_tool("notify_user", {"content": final_answer})
+                self.tools_list.execute_tool("notify_user", {"content": final_answer})
                 return final_answer
 
 
 class PlanAndExecuteAgent(Agent):
-    def __init__(self, name, llm_client, logger, num_retries):
-        super().__init__(name, llm_client)
+    def __init__(self, name, llm_client, tools_list, logger, num_retries):
+        super().__init__(name, llm_client, tools_list)
 
         self.logger = logger
         self.num_retries = num_retries
@@ -217,8 +220,8 @@ class PlanAndExecuteAgent(Agent):
         if len(parsed_plan) == 0:
             return None, []
         plan_text = "\n".join([f"- {step}" for step in parsed_plan])
-        plan_text = f"Please review MyAgent's plan:\n{plan_text}"
-        audit, _ = execute_tool("ask_user", {"question": plan_text})
+        plan_text = f"Review MyAgent's plan and suggest improvements:\n{plan_text}"
+        audit, _ = self.tools_list.execute_tool("ask_user", {"question": plan_text})
 
         node = PlanAndExecuteAgent._build_single_node_xml("audit", audit)
         messages = messages + [
@@ -247,7 +250,7 @@ class PlanAndExecuteAgent(Agent):
             "os": platform.platform(),
             "pwd": os.getcwd(),
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "tools_list": tools_list_desc(),
+            "tools_list": self.tools_list.tools_list_desc(),
         }
         planner_prompt = planner_prompt.format(**dic)
 
@@ -283,6 +286,7 @@ class PlanAndExecuteAgent(Agent):
             react_agent = ReActAgent(
                 f"{self.name} - subagent #{react_agent_id}",
                 self.llm_client,
+                self.tools_list,
                 self.logger,
                 self.num_retries,
             )
