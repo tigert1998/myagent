@@ -3,6 +3,7 @@ import platform
 import os
 from datetime import datetime
 import traceback
+from typing import List
 
 from bs4 import BeautifulSoup, Tag
 
@@ -203,6 +204,11 @@ class PlanAndExecuteAgent(Agent):
             steps.append(j.text)
         return steps
 
+    @staticmethod
+    def _plan_to_markdown(prompt, plan: List[str]):
+        text = "\n".join([f"{i}. {step}" for i, step in enumerate(plan)])
+        return f"**{prompt}**:\n{text}\n"
+
     def _try_one_iter(self, messages):
         _, content = self.llm_client.call(messages)
         soup = BeautifulSoup(content, features="lxml")
@@ -219,11 +225,16 @@ class PlanAndExecuteAgent(Agent):
         parsed_plan = PlanAndExecuteAgent._parse_plan_tag(soup.plan)
         if len(parsed_plan) == 0:
             self.logger.log(self.name, "思考", str(thought))
-            self.logger.log(self.name, "最终计划", str(soup.plan))
+            self.logger.log(self.name, "计划", str(soup.plan))
             return None, []
-        plan_text = "\n".join([f"{i}. {step}" for i, step in enumerate(parsed_plan)])
-        plan_text = f"**Review MyAgent's plan and suggest improvements:**\n{plan_text}"
-        audit, _ = self.tools_list.execute_tool("ask_user", {"question": plan_text})
+        audit, _ = self.tools_list.execute_tool(
+            "ask_user",
+            {
+                "question": PlanAndExecuteAgent._plan_to_markdown(
+                    "Review MyAgent's plan and suggest improvements", parsed_plan
+                )
+            },
+        )
 
         node = PlanAndExecuteAgent._build_single_node_xml("audit", audit)
         messages = messages + [
@@ -269,6 +280,14 @@ class PlanAndExecuteAgent(Agent):
         while True:
             messages, final_plan = self._retry_one_iter(messages)
             if final_plan is not None:
+                if len(final_plan) >= 1:
+                    content = PlanAndExecuteAgent._plan_to_markdown(
+                        "MyAgent has finalized the plan and is now moving forward",
+                        final_plan,
+                    )
+                else:
+                    content = "**Task finished. MyAgent is standing by.**"
+                self.tools_list.execute_tool("notify_user", {"content": content})
                 return final_plan
 
     def run(self, query) -> str:
