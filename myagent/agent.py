@@ -222,6 +222,7 @@ class PlanAndExecuteAgent(Agent):
             "os": platform.platform(),
             "pwd": os.getcwd(),
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "tools_list": tools_list_desc(),
         }
         planner_prompt = planner_prompt.format(**dic)
 
