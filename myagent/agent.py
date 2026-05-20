@@ -219,8 +219,8 @@ class PlanAndExecuteAgent(Agent):
         parsed_plan = PlanAndExecuteAgent._parse_plan_tag(soup.plan)
         if len(parsed_plan) == 0:
             return None, []
-        plan_text = "\n".join([f"- {step}" for step in parsed_plan])
-        plan_text = f"Review MyAgent's plan and suggest improvements:\n{plan_text}"
+        plan_text = "\n".join([f"{i}. {step}" for i, step in enumerate(parsed_plan)])
+        plan_text = f"**Review MyAgent's plan and suggest improvements:**\n{plan_text}"
         audit, _ = self.tools_list.execute_tool("ask_user", {"question": plan_text})
 
         node = PlanAndExecuteAgent._build_single_node_xml("audit", audit)
