@@ -55,7 +55,7 @@ continue the task.
 
     def invoke(self, question: str) -> str:
         TerminalLogger.instance().prompt("MyAgent asks", question)
-        return TerminalLogger.instance().prompt("Your instruction", None)
+        return TerminalLogger.instance().prompt("User replies", None)
 
 
 class NotifyUserTool:
@@ -160,15 +160,15 @@ def _register_tools():
     return ls
 
 
+_tools_list = _register_tools()
+
+
 def tools_list_desc():
-    tools_list = _register_tools()
-    return "```python\n" + "\n\n".join([i["desc"] for i in tools_list]) + "```"
+    return "```python\n" + "\n\n".join([i["desc"] for i in _tools_list]) + "```"
 
 
 def execute_tool(name: str, args: dict):
-    tools_list = _register_tools()
-
-    for tool in tools_list:
+    for tool in _tools_list:
         if name != tool["name"]:
             continue
         func = tool["func"]

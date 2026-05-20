@@ -6,7 +6,6 @@ import traceback
 
 from bs4 import BeautifulSoup, Tag
 
-from myagent.loggers import TerminalLogger
 from myagent.tools import execute_tool, tools_list_desc
 
 
@@ -172,7 +171,7 @@ class ReActAgent(Agent):
         while True:
             messages, final_answer = self._retry_one_iter(messages)
             if final_answer is not None:
-                TerminalLogger.instance().prompt(f"MyAgent reports", final_answer)
+                execute_tool("notify_user", {"content": final_answer})
                 return final_answer
 
 
@@ -218,9 +217,8 @@ class PlanAndExecuteAgent(Agent):
         if len(parsed_plan) == 0:
             return None, []
         plan_text = "\n".join([f"- {step}" for step in parsed_plan])
-        plan_text = f"\n{plan_text}"
-        TerminalLogger.instance().prompt("MyAgent plans", plan_text)
-        audit = TerminalLogger.instance().prompt("Your audit", None)
+        plan_text = f"Please review MyAgent's plan:\n{plan_text}"
+        audit, _ = execute_tool("ask_user", {"question": plan_text})
 
         node = PlanAndExecuteAgent._build_single_node_xml("audit", audit)
         messages = messages + [
