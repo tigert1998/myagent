@@ -22,15 +22,15 @@ class ReActAgent(Agent):
         llm_client,
         logger,
         num_retries,
-        summarize_num=24,
-        summarize_num_keep_latest=6,
+        summarize_num=64,
+        summarize_keep_latest_num=8,
     ):
         super().__init__(name, llm_client)
 
         self.logger = logger
         self.num_retries = num_retries
         self.summarize_num = summarize_num
-        self.summarize_num_keep_latest = summarize_num_keep_latest
+        self.summarize_keep_latest_num = summarize_keep_latest_num
 
     @staticmethod
     def _parse_action_tag(action: Tag):
@@ -123,7 +123,7 @@ class ReActAgent(Agent):
                 m
                 for i, m in enumerate(messages)
                 if m["meta"]["pin"]
-                or (len(messages) - i <= self.summarize_num_keep_latest)
+                or (len(messages) - i <= self.summarize_keep_latest_num)
             ] + [
                 {
                     "role": "assistant",
