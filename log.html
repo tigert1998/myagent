@@ -442,13 +442,13 @@
                 return `<div class="field-value code"></div>`;
             }
 
-            if (['plan'].includes(root.tagName)) {
+            if (['plan', 'final_plan'].includes(root.tagName)) {
                 let steps = [...root.getElementsByTagName("step")];
                 const listHtml = steps.map(s => `<li>${s.textContent}</li>`).join('');
                 return `<div class="field-value"><ol style="margin: 0; padding-left: 20px;">${listHtml}</ol></div>`;
             }
 
-            if (['question', 'thought', 'observation', 'summarization', 'final_answer'].includes(root.tagName)) {
+            if (['question', 'thought', 'observation', 'summarization', 'final_answer', 'audit'].includes(root.tagName)) {
                 return `<div class="field-value markdown-body">${marked.parse(root.textContent)}</div>`;
             }
 

@@ -3,10 +3,10 @@ import platform
 import os
 from datetime import datetime
 import traceback
-from typing import Optional
 
 from bs4 import BeautifulSoup, Tag
 
+from myagent.loggers import TerminalLogger
 from myagent.tools import execute_tool, tools_list_desc
 
 
@@ -92,7 +92,7 @@ class ReActAgent(Agent):
         if soup.final_answer is not None:
             self.logger.log(self.name, "思考", str(thought))
             self.logger.log(self.name, "最终答案", str(soup.final_answer))
-            return messages, soup.final_answer.text.strip()
+            return None, soup.final_answer.text.strip()
 
         name, args = ReActAgent._parse_action_tag(soup.action)
         try:
@@ -172,6 +172,7 @@ class ReActAgent(Agent):
         while True:
             messages, final_answer = self._retry_one_iter(messages)
             if final_answer is not None:
+                TerminalLogger.instance().prompt(f"MyAgent reports", final_answer)
                 return final_answer
 
 
@@ -203,9 +204,34 @@ class PlanAndExecuteAgent(Agent):
     def _try_one_iter(self, messages):
         _, content = self.llm_client.call(messages)
         soup = BeautifulSoup(content, features="lxml")
-        if soup.thought is not None and soup.plan is not None:
-            return soup.thought, soup.plan
-        raise ValueError(f"Content format is incorrect:\n{content}")
+        if soup.plan is None and soup.final_plan is None:
+            raise ValueError(f"Content format is incorrect:\n{content}")
+        thought = soup.thought
+        if thought is None:
+            thought = PlanAndExecuteAgent._build_single_node_xml("thought", "")
+        if soup.final_plan is not None:
+            self.logger.log(self.name, "思考", str(thought))
+            self.logger.log(self.name, "最终计划", str(soup.final_plan))
+            return None, PlanAndExecuteAgent._parse_plan_tag(soup.final_plan)
+
+        parsed_plan = PlanAndExecuteAgent._parse_plan_tag(soup.plan)
+        if len(parsed_plan) == 0:
+            return None, []
+        plan_text = "\n".join([f"- {step}" for step in parsed_plan])
+        plan_text = f"\n{plan_text}"
+        TerminalLogger.instance().prompt("MyAgent plans", plan_text)
+        audit = TerminalLogger.instance().prompt("Your audit", None)
+
+        node = PlanAndExecuteAgent._build_single_node_xml("audit", audit)
+        messages = messages + [
+            {"role": "assistant", "content": str(thought) + (str(soup.plan))},
+            {"role": "user", "content": str(node)},
+        ]
+
+        self.logger.log(self.name, "思考", str(thought))
+        self.logger.log(self.name, "计划", str(soup.plan))
+        self.logger.log(self.name, "审计", str(node))
+        return messages, None
 
     def _retry_one_iter(self, messages):
         for _ in range(self.num_retries + 1):
@@ -236,11 +262,11 @@ class PlanAndExecuteAgent(Agent):
             },
         ]
         self.logger.log(self.name, "用户提问", str(node))
-        thought, plan = self._retry_one_iter(messages)
-        self.logger.log(self.name, "思考", str(thought))
-        self.logger.log(self.name, "计划", str(plan))
 
-        return PlanAndExecuteAgent._parse_plan_tag(plan)
+        while True:
+            messages, final_plan = self._retry_one_iter(messages)
+            if final_plan is not None:
+                return final_plan
 
     def run(self, query) -> str:
         steps_answers = []

@@ -34,6 +34,5 @@ if __name__ == "__main__":
             num_retries=3,
         )
 
-    TerminalLogger.instance().prompt("User query", args.query)
+    TerminalLogger.instance().prompt("User queries", args.query)
     answer = agent.run(args.query)
-    TerminalLogger.instance().prompt("Answer", answer)
