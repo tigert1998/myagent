@@ -11,7 +11,9 @@ import frontmatter
 
 class BashTool:
     name = "bash"
-    desc = "Execute the bash command. Returns stdout, stderr and returncode."
+    desc = """Executes a bash command from the command line.
+Returns the standard output, standard error, and return code in a JSON block.
+"""
     pin = False
 
     def invoke(self, cmd: str) -> str:
@@ -84,12 +86,16 @@ the user about the current state of the workflow.
         )
 
 
+def _skill_doc_inject_envs(content, skill_dir):
+    return content.replace("${CLAUDE_SKILL_DIR}", skill_dir)
+
+
 class LoadSkillTool:
     name = "load_skill"
 
     @property
     def desc(self) -> str:
-        return """Load the full content of a specific skill by name.
+        return """Load the `SKILL.md` of a specific skill by name.
 
 A skill is a reusable capability package that typically includes a `SKILL.md` file
 describing what the skill does, when it should be used, and any related instructions or requirements.
@@ -126,7 +132,8 @@ The list of skills:
         skill_md_path = osp.join(folder, "SKILL.md")
         with open(skill_md_path, "r") as f:
             md = frontmatter.load(f)
-        return md.content
+        content = _skill_doc_inject_envs(md.content, folder)
+        return content
 
 
 class LoadSkillReferenceTool:
@@ -145,53 +152,7 @@ so the agent can access supporting materials required for the task.
     def invoke(self, skill_name: str, path: str) -> str:
         folder = osp.expanduser(osp.join("~/.agents/skills", skill_name))
         with open(osp.join(folder, path), "r") as f:
-            return f.read()
-
-
-class ExecuteSkillBashTool:
-    name = "execute_skill_bash"
-
-    desc = """Execute a bash command within the context of a specific skill.
-
-Skills may provide scripts, tools, or local resources that need to be executed
-from the command line. This tool runs a bash command with the skill directory
-exposed through the `CLAUDE_SKILL_DIR` environment variable, allowing commands
-to access files and resources bundled with the skill.
-
-The tool returns the command's standard output, standard error, and exit code.
-"""
-
-    pin = False
-
-    def invoke(self, skill_name: str, cmd: str) -> str:
-        p = subprocess.Popen(
-            cmd,
-            shell=True,
-            executable="/bin/bash",
-            env={
-                **os.environ,
-                "CLAUDE_SKILL_DIR": osp.expanduser(
-                    osp.join("~/.agents/skills", skill_name)
-                ),
-            },
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        stdout, stderr = p.communicate()
-        return (
-            "```json\n"
-            + json.dumps(
-                {
-                    "stdout": stdout,
-                    "stderr": stderr,
-                    "returncode": p.returncode,
-                },
-                indent=4,
-                ensure_ascii=False,
-            )
-            + "\n```\n"
-        )
+            return _skill_doc_inject_envs(f.read(), folder)
 
 
 def _register_tools():
@@ -199,10 +160,9 @@ def _register_tools():
     tools = [
         AskUserTool(),
         NotifyUserTool(),
-        BashTool(),
         LoadSkillTool(),
         LoadSkillReferenceTool(),
-        ExecuteSkillBashTool(),
+        BashTool(),
     ]
     for tool in tools:
         desc = f'def {tool.name}{inspect.signature(tool.invoke)}\n\t"""{tool.desc}"""\n\tpass\n'
