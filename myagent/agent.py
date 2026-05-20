@@ -1,87 +1,12 @@
-import requests
 import json
 import platform
-import os.path as osp
 import os
 from datetime import datetime
 import traceback
 
 from bs4 import BeautifulSoup, Tag
 
-from tools import execute_tool, tools_list_desc
-
-
-class DeepSeekClient:
-    def __init__(self, url, model, key, other_configs):
-        self.url = url
-        self.model = model
-        self.key = key
-        self.other_configs = other_configs
-
-    def call(self, messages):
-        messages = [{"role": m["role"], "content": m["content"]} for m in messages]
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "stream": False,
-            **self.other_configs,
-        }
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.key}",
-        }
-        response = requests.post(url=self.url, headers=headers, json=payload)
-        response.raise_for_status()
-        response_data = response.json()
-        message = response_data["choices"][0]["message"]
-        return message.get("reasoning_content", ""), message["content"]
-
-    def call_stream(self, messages, callback):
-        messages = [{"role": m["role"], "content": m["content"]} for m in messages]
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "stream": True,
-            **self.other_configs,
-        }
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.key}",
-        }
-        with requests.post(
-            self.url, json=payload, headers=headers, stream=True
-        ) as response:
-            for line in response.iter_lines():
-                if not line:
-                    continue
-                decoded_line = line.decode("utf-8")
-                if decoded_line.startswith("data:"):
-                    json_data = decoded_line[len("data:") :].strip()
-                    if json_data == "[DONE]":
-                        break
-                    chunk = json.loads(json_data)
-                    if len(chunk["choices"]) == 0:
-                        continue
-                    delta_reasoning_content = chunk["choices"][0]["delta"].get(
-                        "reasoning_content", ""
-                    )
-                    if delta_reasoning_content is None:
-                        delta_reasoning_content = ""
-                    delta_content = chunk["choices"][0]["delta"].get("content", "")
-                    if delta_content is None:
-                        delta_content = ""
-                    callback(delta_reasoning_content, delta_content)
-                else:
-                    try:
-                        obj = json.loads(decoded_line)
-                    except:
-                        continue
-
-                    if (
-                        obj.get("error") is not None
-                        and obj["error"].get("message") is not None
-                    ):
-                        raise ValueError(obj["error"]["message"])
+from myagent.tools import execute_tool, tools_list_desc
 
 
 class Agent:
@@ -128,7 +53,7 @@ class ReActAgent(Agent):
         return node
 
     def _summarize(self, history):
-        with open(osp.join(osp.dirname(__file__), "prompts/summarizer.md"), "r") as f:
+        with open("prompts/summarizer.md", "r") as f:
             summarizer_prompt = f.read()
 
         dic = {
@@ -218,7 +143,7 @@ class ReActAgent(Agent):
         raise exception
 
     def run(self, query):
-        with open(osp.join(osp.dirname(__file__), "prompts/react.md"), "r") as f:
+        with open("prompts/react.md", "r") as f:
             react_prompt = f.read()
         dic = {
             "os": platform.platform(),
@@ -290,7 +215,7 @@ class PlanAndExecuteAgent(Agent):
         raise exception
 
     def _plan(self, query):
-        with open(osp.join(osp.dirname(__file__), "prompts/planner.md"), "r") as f:
+        with open("prompts/planner.md", "r") as f:
             planner_prompt = f.read()
 
         dic = {

@@ -4,7 +4,7 @@ import inspect
 import os
 import os.path as osp
 
-from loggers import TerminalLogger
+from myagent.loggers import TerminalLogger
 
 import frontmatter
 
@@ -56,8 +56,8 @@ continue the task.
         return TerminalLogger.instance().prompt("Your instruction", None)
 
 
-class InformUserTool:
-    name = "inform_user"
+class NotifyUserTool:
+    name = "notify_user"
 
     desc = """Send an informational message or progress update to the user.
 
@@ -70,7 +70,7 @@ the user about the current state of the workflow.
     pin = False
 
     def invoke(self, content: str) -> str:
-        TerminalLogger.instance().prompt("MyAgent notice", content)
+        TerminalLogger.instance().prompt("MyAgent updates", content)
         return (
             "```json\n"
             + json.dumps(
@@ -198,7 +198,7 @@ def _register_tools():
     ls = []
     tools = [
         AskUserTool(),
-        InformUserTool(),
+        NotifyUserTool(),
         BashTool(),
         LoadSkillTool(),
         LoadSkillReferenceTool(),

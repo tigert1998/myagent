@@ -1,8 +1,9 @@
 import argparse
 import json
 
-from agent import PlanAndExecuteAgent, DeepSeekClient
-from loggers import JsonlLogger, TerminalLogger
+from myagent.llm_client import LLMClient
+from myagent.agent import PlanAndExecuteAgent
+from myagent.loggers import JsonlLogger, TerminalLogger
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("agent")
@@ -18,12 +19,7 @@ if __name__ == "__main__":
 
     agent = PlanAndExecuteAgent(
         "PlanAndExecuteAgent",
-        DeepSeekClient(
-            config["url"],
-            config["model"],
-            config["key"],
-            config.get("other_configs", {}),
-        ),
+        LLMClient.build(config),
         logger,
         num_retries=3,
     )
