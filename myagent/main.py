@@ -23,6 +23,7 @@ if __name__ == "__main__":
         logger,
         num_retries=3,
     )
-    answer = agent.run(args.query)
 
+    TerminalLogger.instance().prompt("User query", args.query)
+    answer = agent.run(args.query)
     TerminalLogger.instance().prompt("Answer", answer)
