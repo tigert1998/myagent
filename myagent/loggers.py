@@ -1,5 +1,6 @@
 import json
 import colorama
+from datetime import datetime
 
 
 class JsonlLogger:
@@ -30,7 +31,11 @@ class TerminalLogger:
         return TerminalLogger._instance
 
     def prompt(self, prompt, text):
-        print(colorama.Fore.RED + prompt + ": " + colorama.Fore.RESET, end="")
+        time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(
+            f"[{time_str}] {colorama.Fore.RED}{prompt}:{colorama.Fore.RESET} ",
+            end="",
+        )
         if text is None:
             return input()
         else:
