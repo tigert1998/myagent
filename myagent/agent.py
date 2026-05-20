@@ -3,6 +3,7 @@ import platform
 import os
 from datetime import datetime
 import traceback
+from typing import Optional
 
 from bs4 import BeautifulSoup, Tag
 
@@ -91,7 +92,7 @@ class ReActAgent(Agent):
         if soup.final_answer is not None:
             self.logger.log(self.name, "思考", str(thought))
             self.logger.log(self.name, "最终答案", str(soup.final_answer))
-            return messages, soup.final_answer.text
+            return messages, soup.final_answer.text.strip()
 
         name, args = ReActAgent._parse_action_tag(soup.action)
         try:
@@ -142,7 +143,7 @@ class ReActAgent(Agent):
                 exception = traceback.format_exc()
         raise exception
 
-    def run(self, query):
+    def run(self, query) -> str:
         with open("prompts/react.md", "r") as f:
             react_prompt = f.read()
         dic = {
@@ -241,7 +242,7 @@ class PlanAndExecuteAgent(Agent):
 
         return PlanAndExecuteAgent._parse_plan_tag(plan)
 
-    def run(self, query):
+    def run(self, query) -> str:
         steps_answers = []
         steps = []
 
@@ -252,7 +253,7 @@ class PlanAndExecuteAgent(Agent):
 
             new_steps = self._plan(planner_query)
             if len(new_steps) == 0:
-                return steps_answers[-1]
+                return steps_answers[-1] if len(steps_answers) >= 1 else ""
 
             react_agent_id = len(steps) + 1
             react_agent = ReActAgent(
