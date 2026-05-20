@@ -218,6 +218,8 @@ class PlanAndExecuteAgent(Agent):
 
         parsed_plan = PlanAndExecuteAgent._parse_plan_tag(soup.plan)
         if len(parsed_plan) == 0:
+            self.logger.log(self.name, "思考", str(thought))
+            self.logger.log(self.name, "最终计划", str(soup.plan))
             return None, []
         plan_text = "\n".join([f"{i}. {step}" for i, step in enumerate(parsed_plan)])
         plan_text = f"**Review MyAgent's plan and suggest improvements:**\n{plan_text}"

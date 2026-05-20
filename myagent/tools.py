@@ -4,8 +4,6 @@ import inspect
 import os
 import os.path as osp
 
-from myagent.loggers import TerminalLogger
-
 import frontmatter
 
 
