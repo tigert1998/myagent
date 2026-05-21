@@ -50,33 +50,36 @@ class ReActAgent(Agent):
         self.summarize_num = summarize_num
         self.summarize_keep_latest_num = summarize_keep_latest_num
 
-    @staticmethod
-    def _parse_action(obj: dict):
+    def _parse_idsep(self, content: str):
+        obj = self.idsep_parser.parse(content)
+
         ans = {}
-        tool = None
-        for k, arg_value in obj.items():
+
+        for k, v in obj.items():
             k_parts = k.split(".")
-            if "action" not in k_parts:
-                continue
-            if tool is None:
-                tool = k_parts[1]
-            elif tool != k_parts[1]:
-                raise ValueError(
-                    f"Two different tool invocation in a same action: {obj}"
-                )
-            arg_name = k_parts[2]
-            ans[arg_name] = arg_value
-        return tool, ans
+            node = ans
+            for k_part in k_parts[:-1]:
+                if node.get(k_part) is None:
+                    node[k_part] = {}
+                node = node[k_part]
+            node[k_parts[-1]] = v
+
+        return ans
 
     def _summarize(self, history):
         with open("prompts/summarizer.md", "r") as f:
             summarizer_prompt = f.read()
 
+        history_objs = []
+        for m in history[1:]:
+            obj = self._parse_idsep(m["content"])
+            history_objs.append({"role": m["role"], "content": obj})
+
         dic = {
             "os": platform.platform(),
             "pwd": os.getcwd(),
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "history": json.dumps(history, indent=4),
+            "history": json.dumps(history_objs, indent=4, ensure_ascii=False),
         }
         summarizer_prompt = summarizer_prompt.format(**dic)
 
@@ -94,17 +97,19 @@ class ReActAgent(Agent):
     def _try_one_iter(self, messages):
         _, content = self.llm_client.call(messages)
 
-        obj = self.idsep_parser.parse(content)
+        obj = self._parse_idsep(content)
 
         if "final_answer" in obj:
             self.logger.log(self.name, {"thought": obj.get("thought", "")})
             self.logger.log(self.name, {"final_answer": obj["final_answer"]})
             return None, obj["final_answer"]
 
-        if not any(["action." in k for k in obj.keys()]):
+        if "action" not in obj:
             raise ValueError(f"Invalid content format: {obj}")
 
-        tool, args = self._parse_action(obj)
+        for tool, args in obj["action"].items():
+            break
+
         self.logger.log(self.name, {"thought": obj.get("thought", "")})
         self.logger.log(self.name, {"action": {"tool": tool, "args": args}})
         try:
@@ -117,7 +122,7 @@ class ReActAgent(Agent):
         messages = messages + [
             {
                 "role": "assistant",
-                "content": self.idsep_parser.build(obj),
+                "content": content,
                 "meta": {"pin": pin},
             },
             {
@@ -129,6 +134,7 @@ class ReActAgent(Agent):
 
         if len(messages) >= self.summarize_num:
             content = self._summarize(messages)
+            summarization_obj = {"summarization": content}
             messages = [
                 m
                 for i, m in enumerate(messages)
@@ -137,7 +143,7 @@ class ReActAgent(Agent):
             ] + [
                 {
                     "role": "assistant",
-                    "content": content,
+                    "content": self.idsep_parser.build(summarization_obj),
                     "meta": {"pin": False},
                 }
             ]
