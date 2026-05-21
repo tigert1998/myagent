@@ -9,22 +9,25 @@ from bs4 import BeautifulSoup, Tag
 
 from myagent.tools import ToolsList
 from myagent.llm_client import LLMClient
-
-
-def _build_single_xml_node(name, content):
-    soup = BeautifulSoup(features="xml")
-    node = soup.new_tag(name)
-    node.string = content
-    return node
+from myagent.idsep_parser import IDSepParser
 
 
 class Agent:
-    def __init__(self, name, llm_client: LLMClient, tools_list: ToolsList):
+    def __init__(
+        self,
+        name,
+        llm_client: LLMClient,
+        tools_list: ToolsList,
+        idsep_parser: IDSepParser,
+    ):
         self.name = name
         self.llm_client = llm_client
         self.tools_list = tools_list
+        self.idsep_parser = idsep_parser
         with open("prompts/soul.md", "r") as f:
             self.soul = f.read()
+        with open("prompts/idsep_desc.md", "r") as f:
+            self.idsep_desc = f.read().format(sepid=self.idsep_parser.sepid)
 
 
 class ReActAgent(Agent):
@@ -33,12 +36,13 @@ class ReActAgent(Agent):
         name,
         llm_client,
         tools_list,
+        idsep_parser,
         logger,
         num_retries,
         summarize_num=64,
         summarize_keep_latest_num=8,
     ):
-        super().__init__(name, llm_client, tools_list)
+        super().__init__(name, llm_client, tools_list, idsep_parser)
 
         self.logger = logger
         self.num_retries = num_retries
@@ -46,17 +50,22 @@ class ReActAgent(Agent):
         self.summarize_keep_latest_num = summarize_keep_latest_num
 
     @staticmethod
-    def _parse_action_tag(action: Tag):
-        root = action.find()
-        tool_name = root.name
-        dic = {}
-        for j in root.children:
-            if not isinstance(j, Tag):
+    def _parse_action(obj: dict):
+        ans = {}
+        tool = None
+        for k, arg_value in obj.items():
+            k_parts = k.split(".")
+            if "action" not in k_parts:
                 continue
-            argument_name = j.name
-            argument_value = j.decode_contents()
-            dic[argument_name] = argument_value
-        return tool_name, dic
+            if tool is None:
+                tool = k_parts[1]
+            elif tool != k_parts[1]:
+                raise ValueError(
+                    f"Two different tool invocation in a same action: {obj}"
+                )
+            arg_name = k_parts[2]
+            ans[arg_name] = arg_value
+        return tool, ans
 
     def _summarize(self, history):
         with open("prompts/summarizer.md", "r") as f:
@@ -78,47 +87,41 @@ class ReActAgent(Agent):
         ]
 
         _, content = self.llm_client.call(messages)
-        summarization = _build_single_xml_node("summarization", content)
-        self.logger.log(self.name, "阶段总结", str(summarization))
+        self.logger.log(self.name, {"summarization": content})
         return content
 
     def _try_one_iter(self, messages):
         _, content = self.llm_client.call(messages)
 
-        soup = BeautifulSoup(content, features="lxml")
-        if soup.action is None and soup.final_answer is None:
-            raise ValueError(f"Content format is incorrect:\n{content}")
+        obj = self.idsep_parser.parse(content)
 
-        if soup.thought is None:
-            thought = _build_single_xml_node("thought", "")
-        else:
-            thought = soup.thought
+        if "final_answer" in obj:
+            self.logger.log(self.name, {"thought": obj.get("thought", "")})
+            self.logger.log(self.name, {"final_answer": obj["final_answer"]})
+            return None, obj["final_answer"]
 
-        if soup.final_answer is not None:
-            self.logger.log(self.name, "思考", str(thought))
-            self.logger.log(self.name, "最终答案", str(soup.final_answer))
-            return None, soup.final_answer.text.strip()
+        if not any(["action." in k for k in obj.keys()]):
+            raise ValueError(f"Invalid content format: {obj}")
 
-        self.logger.log(self.name, "思考", str(thought))
-        self.logger.log(self.name, "行动", str(soup.action))
-        name, args = ReActAgent._parse_action_tag(soup.action)
+        tool, args = self._parse_action(obj)
+        self.logger.log(self.name, {"thought": obj.get("thought", "")})
+        self.logger.log(self.name, {"action": {"tool": tool, "args": args}})
         try:
-            output, pin = self.tools_list.execute_tool(name, args)
+            observation, pin = self.tools_list.execute_tool(tool, args)
         except:
-            output = traceback.format_exc()
+            observation = traceback.format_exc()
             pin = False
-        observation = _build_single_xml_node("observation", output)
-        self.logger.log(self.name, "观察结果", str(observation))
-
+        observation_obj = {"observation": observation}
+        self.logger.log(self.name, observation_obj)
         messages = messages + [
             {
                 "role": "assistant",
-                "content": str(thought) + str(soup.action),
+                "content": self.idsep_parser.build(obj),
                 "meta": {"pin": pin},
             },
             {
                 "role": "user",
-                "content": str(observation),
+                "content": self.idsep_parser.build(observation_obj),
                 "meta": {"pin": pin},
             },
         ]
@@ -157,10 +160,12 @@ class ReActAgent(Agent):
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "tools_list": self.tools_list.tools_list_desc(),
             "soul": self.soul,
+            "idsep_desc": self.idsep_desc,
+            "sepid": self.idsep_parser.sepid,
         }
         react_prompt = react_prompt.format(**dic)
 
-        node = _build_single_xml_node("question", query)
+        question_obj = {"question": query}
         messages = [
             {
                 "role": "system",
@@ -169,11 +174,11 @@ class ReActAgent(Agent):
             },
             {
                 "role": "user",
-                "content": str(node),
+                "content": self.idsep_parser.build(question_obj),
                 "meta": {"pin": True},
             },
         ]
-        self.logger.log(self.name, "用户提问", str(node))
+        self.logger.log(self.name, question_obj)
 
         while True:
             messages, final_answer = self._retry_one_iter(messages)
@@ -183,21 +188,20 @@ class ReActAgent(Agent):
 
 
 class PlanAndExecuteAgent(Agent):
-    def __init__(self, name, llm_client, tools_list, logger, num_retries):
-        super().__init__(name, llm_client, tools_list)
+    def __init__(self, name, llm_client, tools_list, idsep_parser, logger, num_retries):
+        super().__init__(name, llm_client, tools_list, idsep_parser)
 
         self.logger = logger
         self.num_retries = num_retries
 
     @staticmethod
-    def _parse_plan_tag(plan: Tag):
+    def _parse_plan(obj: dict):
         steps = []
-        for j in plan.children:
-            if not isinstance(j, Tag):
+        for k, v in obj.items():
+            k_parts = k.split(".")
+            if "step" != k_parts[1]:
                 continue
-            if j.name != "step":
-                continue
-            steps.append(j.text)
+            steps.append(v)
         return steps
 
     @staticmethod
@@ -207,40 +211,40 @@ class PlanAndExecuteAgent(Agent):
 
     def _try_one_iter(self, messages):
         _, content = self.llm_client.call(messages)
-        soup = BeautifulSoup(content, features="lxml")
-        if soup.plan is None and soup.final_plan is None:
-            raise ValueError(f"Content format is incorrect:\n{content}")
-        thought = soup.thought
-        if thought is None:
-            thought = _build_single_xml_node("thought", "")
-        if soup.final_plan is not None:
-            self.logger.log(self.name, "思考", str(thought))
-            self.logger.log(self.name, "最终计划", str(soup.final_plan))
-            return None, PlanAndExecuteAgent._parse_plan_tag(soup.final_plan)
 
-        parsed_plan = PlanAndExecuteAgent._parse_plan_tag(soup.plan)
-        if len(parsed_plan) == 0:
-            self.logger.log(self.name, "思考", str(thought))
-            self.logger.log(self.name, "计划", str(soup.plan))
+        obj = self.idsep_parser.parse(content)
+
+        if any(["final_plan." in k for k in obj.keys()]):
+            final_plan_steps = self._parse_plan(obj)
+            self.logger.log(self.name, {"thought": obj.get("thought", "")})
+            self.logger.log(self.name, {"final_plan": final_plan_steps})
+            return None, final_plan_steps
+
+        if not any(["plan." in k for k in obj.keys()]):
+            self.logger.log(self.name, {"thought": obj.get("thought", "")})
+            self.logger.log(self.name, {"final_plan": []})
             return None, []
+
+        plan_steps = self._parse_plan(obj)
+
         audit, _ = self.tools_list.execute_tool(
             "ask_user",
             {
                 "question": PlanAndExecuteAgent._plan_to_markdown(
-                    "Review MyAgent's plan and suggest improvements", parsed_plan
+                    "Review MyAgent's plan and suggest improvements", plan_steps
                 )
             },
         )
 
-        node = _build_single_xml_node("audit", audit)
+        audit_obj = {"audit": audit}
         messages = messages + [
-            {"role": "assistant", "content": str(thought) + (str(soup.plan))},
-            {"role": "user", "content": str(node)},
+            {"role": "assistant", "content": self.idsep_parser.build(obj)},
+            {"role": "user", "content": self.idsep_parser.build(audit_obj)},
         ]
 
-        self.logger.log(self.name, "思考", str(thought))
-        self.logger.log(self.name, "计划", str(soup.plan))
-        self.logger.log(self.name, "审计", str(node))
+        self.logger.log(self.name, {"thought": obj.get("thought", "")})
+        self.logger.log(self.name, {"plan": plan_steps})
+        self.logger.log(self.name, audit_obj)
         return messages, None
 
     def _retry_one_iter(self, messages):
@@ -261,24 +265,26 @@ class PlanAndExecuteAgent(Agent):
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "tools_list": self.tools_list.tools_list_desc(),
             "soul": self.soul,
+            "idsep_desc": self.idsep_desc,
+            "sepid": self.idsep_parser.sepid,
         }
         planner_prompt = planner_prompt.format(**dic)
 
-        node = _build_single_xml_node("question", query)
+        question_obj = {"question": query}
         messages = [
             {"role": "system", "content": planner_prompt},
             {
                 "role": "user",
-                "content": str(node),
+                "content": self.idsep_parser.build(question_obj),
             },
         ]
-        self.logger.log(self.name, "用户提问", str(node))
+        self.logger.log(self.name, question_obj)
 
         while True:
             messages, final_plan = self._retry_one_iter(messages)
             if final_plan is not None:
                 if len(final_plan) >= 1:
-                    content = PlanAndExecuteAgent._plan_to_markdown(
+                    content = self._plan_to_markdown(
                         "MyAgent has finalized the plan and is now moving forward",
                         final_plan,
                     )
@@ -305,6 +311,7 @@ class PlanAndExecuteAgent(Agent):
                 f"{self.name} - subagent #{react_agent_id}",
                 self.llm_client,
                 self.tools_list,
+                self.idsep_parser,
                 self.logger,
                 self.num_retries,
             )
