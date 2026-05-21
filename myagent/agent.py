@@ -99,17 +99,17 @@ class ReActAgent(Agent):
             self.logger.log(self.name, "最终答案", str(soup.final_answer))
             return None, soup.final_answer.text.strip()
 
+        self.logger.log(self.name, "思考", str(thought))
+        self.logger.log(self.name, "行动", str(soup.action))
         name, args = ReActAgent._parse_action_tag(soup.action)
         try:
             output, pin = self.tools_list.execute_tool(name, args)
         except:
             output = traceback.format_exc()
             pin = False
-
-        self.logger.log(self.name, "思考", str(thought))
-        self.logger.log(self.name, "行动", str(soup.action))
         observation = ReActAgent._build_single_node_xml("observation", output)
         self.logger.log(self.name, "观察结果", str(observation))
+
         messages = messages + [
             {
                 "role": "assistant",

@@ -9,12 +9,13 @@ import frontmatter
 
 class BashTool:
     name = "bash"
-    desc = """Executes a bash command from the command line.
+    desc = """Executes a bash command with timeout from the command line.
 Returns the standard output, standard error, and return code in a JSON block.
 """
     pin = False
 
-    def invoke(self, cmd: str) -> str:
+    def invoke(self, cmd: str, timeout: str) -> str:
+        timeout_num = float(timeout)
         p = subprocess.Popen(
             cmd,
             shell=True,
@@ -23,7 +24,7 @@ Returns the standard output, standard error, and return code in a JSON block.
             stderr=subprocess.PIPE,
             text=True,
         )
-        stdout, stderr = p.communicate()
+        stdout, stderr = p.communicate(timeout=timeout_num)
         return (
             "```json\n"
             + json.dumps(
