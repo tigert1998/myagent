@@ -4,14 +4,14 @@
 IDSep（IDentifier Separator 的缩写）是一种用于编码键值对（Key-Value Pair）的文本格式。它通过一个特定的分隔符 `$ID` 将键（Key）和值（Value）连接起来，形成一串连续的字符序列。
 
 ## 格式定义
-IDSep 采用 **`$IDKey$IDValue`** 的循环结构进行编码。
+IDSep 采用 `$ID` Key `$ID` Value 的循环结构进行编码。
 
 ### 语法规则
 假设有一组键值对：`k1: v1, k2: v2, ..., kn: vn`。
 
 其对应的 IDSep 编码结果为：
 ```text
-$IDk1$IDv1$IDk2$IDv2$ID...$IDkn$IDvn$ID
+$ID k1 $ID v1 $ID k2 $ID v2 $ID ... $ID kn $ID vn $ID
 ```
 
 **核心特征：**

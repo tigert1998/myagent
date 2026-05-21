@@ -39,7 +39,7 @@ if __name__ == "__main__":
             "PlanAndExecuteAgent",
             llm_client,
             tools_list,
-            # idsep_parser,
+            idsep_parser,
             logger,
             num_retries=3,
         )

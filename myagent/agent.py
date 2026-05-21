@@ -5,8 +5,6 @@ from datetime import datetime
 import traceback
 from typing import List
 
-from bs4 import BeautifulSoup, Tag
-
 from myagent.tools import ToolsList
 from myagent.llm_client import LLMClient
 from myagent.idsep_parser import IDSepParser
@@ -199,14 +197,14 @@ class PlanAndExecuteAgent(Agent):
         steps = []
         for k, v in obj.items():
             k_parts = k.split(".")
-            if "step" != k_parts[1]:
+            if len(k_parts) <= 1 or "step" != k_parts[1]:
                 continue
             steps.append(v)
         return steps
 
     @staticmethod
     def _plan_to_markdown(prompt, plan: List[str]):
-        text = "\n".join([f"{i}. {step}" for i, step in enumerate(plan)])
+        text = "\n".join([f"{i + 1}. {step}" for i, step in enumerate(plan)])
         return f"**{prompt}**:\n{text}\n"
 
     def _try_one_iter(self, messages):
