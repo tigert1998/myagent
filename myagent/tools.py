@@ -69,8 +69,8 @@ class TODOTool:
     def render_for_agent(self) -> str:
         lines = []
         for i, item in enumerate(self.planning_state.items):
-            lines.append(f"[Plan Item #{i + 1}: {item.status}] {item.content}")
-        return "\n".join(lines)
+            lines.append(f"- [Plan Item #{i + 1}: {item.status}] {item.content}")
+        return "\n".join(lines) + "\n"
 
     def render_for_user(self) -> str:
         renders = []
@@ -106,13 +106,18 @@ and decide the next steps. This tool does not modify the list.
 class WriteTODOTool(TODOTool):
     name = "write_todo"
 
-    desc = """Completely overwrites the current TODO list with a new one provided as a CSV string. 
+    desc = """You have access to TODO tools to help you manage and plan tasks.
+Use these tools VERY frequently to ensure that you are tracking your tasks 
+and giving the user visibility into your progress.
+
+These tools are also EXTREMELY helpful for planning tasks, and for breaking 
+down larger complex tasks into smaller steps. If you do not use this tool 
+when planning, you may forget to do important tasks - and that is unacceptable.
 
 The input MUST be a valid CSV formatted string containing exactly two columns: 'status' and 'content'. 
 Example format: 'status,content\\ncompleted,Task A\\npending,Task B\\nin_progress,Task C'.
 There should always be one and only one "in_progress" task in the TODO list. 
 This action clears all previous items and replaces them with the new parsed items. 
-NOTICE: you must use this tool VERY frequently.
 """
 
     pin = False
@@ -125,13 +130,14 @@ NOTICE: you must use this tool VERY frequently.
         self.planning_state.update(todo_csv)
         self.planning_state.rounds_since_update = 0
         self.send_msg(self.render_for_user())
+        return _json_returns({"success": True})
 
     def inject(self) -> str:
         if (
             self.planning_state.rounds_since_update
             >= self.planning_state.reminder_rounds
         ):
-            output = f"REMINDER: there are {self.planning_state.rounds_since_update} rounds since last plan update. Refresh your plan ASAP."
+            output = f"REMINDER: there are {self.planning_state.rounds_since_update} rounds since last plan update. Update your plan with {self.name} tool ASAP."
         else:
             output = ""
 
@@ -143,8 +149,8 @@ class TODO:
     def __init__(self, send_msg):
         self.planning_state = PlanningState()
         self.planning_state.items = []
-        self.planning_state.rounds_since_update = 0
-        self.planning_state.reminder_rounds = 8
+        self.planning_state.rounds_since_update = 1
+        self.planning_state.reminder_rounds = 5
         self.send_msg = send_msg
 
     def tools(self):
@@ -170,7 +176,7 @@ or code without loading the entire content into memory. Handles UTF-8 encoding.
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
             lines = content.split("\n")
-            return "\n".join(lines[offset : offset + limit])
+            return "```\n" + "\n".join(lines[offset : offset + limit]) + "\n```\n"
 
 
 class WriteFileTool:
@@ -271,7 +277,7 @@ continue the task.
 
     def invoke(self, question: str) -> str:
         self.send_msg(question)
-        return self.request_msg()
+        return "> " + self.request_msg() + "\n"
 
 
 class NotifyUserTool:
@@ -404,6 +410,6 @@ class ToolsList:
             if tool["inject"] is not None:
                 additional_output.append(tool["inject"]())
 
-        output = output + "\n" + "\n".join(additional_output)
+        output = output + "\n\n" + "\n\n".join(additional_output)
 
         return output, pin

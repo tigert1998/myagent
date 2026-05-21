@@ -14,7 +14,7 @@ class IDSepParser:
     def parse(self, s: str):
         parts = s.split(self.sepid)[1:-1]
         if len(parts) % 2 != 0:
-            raise ValueError("IDSep key value pairs are not matched")
+            raise ValueError(f'IDSep key value pairs are not matched: "{s}"')
 
         ans = {}
         for i in range(0, len(parts), 2):
