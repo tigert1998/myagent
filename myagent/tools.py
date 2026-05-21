@@ -3,6 +3,9 @@ import json
 import inspect
 import os
 import os.path as osp
+from typing import List
+import csv
+import io
 
 import frontmatter
 
@@ -17,6 +20,138 @@ def _json_returns(obj):
         )
         + "\n```\n"
     )
+
+
+class PlanItem:
+    content: str
+    status: str
+
+    def __init__(self, status: str, content: str):
+        self.content = content
+        self.status = status
+        self.check()
+
+    def check(self):
+        if self.status not in ["pending", "in_progress", "completed"]:
+            raise ValueError(
+                f'Invalid status "{self.status}" for TODO item: "{self.content}"'
+            )
+
+
+class PlanningState:
+    items: List[PlanItem]
+    rounds_since_update: int
+    reminder_rounds: int
+
+    def update(self, todo_csv: str):
+        f = io.StringIO(todo_csv)
+        reader = csv.DictReader(f)
+        self.items.clear()
+        for row in reader:
+            self.items.append(PlanItem(row["status"], row["content"]))
+        self.check()
+
+    def check(self):
+        count_in_progress = 0
+        for i in self.items:
+            if i.status == "in_progress":
+                count_in_progress += 1
+        if count_in_progress != 1:
+            raise ValueError(
+                f"There are {count_in_progress} TODO items in progress. Only one is allowed."
+            )
+
+
+class TODOTool:
+    def __init__(self, planning_state: PlanningState):
+        self.planning_state = planning_state
+
+    def render_for_agent(self) -> str:
+        lines = []
+        for i, item in enumerate(self.planning_state.items):
+            lines.append(f"[Plan Item #{i + 1}: {item.status}] {item.content}")
+        return "\n".join(lines)
+
+    def render_for_user(self) -> str:
+        renders = []
+        for i in self.planning_state.items:
+            if i.status == "pending":
+                s = " "
+            elif i.status == "in_progress":
+                s = ">"
+            elif i.status == "completed":
+                s = "x"
+            renders.append(f"[{s}] {i.content}")
+        return "\n".join(renders)
+
+
+class ReadTODOTool(TODOTool):
+    name = "read_todo"
+
+    desc = """Reads the current state of the TODO list.
+
+Use this tool to check the status of tasks, see what has been completed,
+and decide the next steps. This tool does not modify the list.
+"""
+
+    pin = False
+
+    def __init__(self, planning_state: PlanningState):
+        super().__init__(planning_state)
+
+    def invoke(self) -> str:
+        return self.render_for_agent()
+
+
+class WriteTODOTool(TODOTool):
+    name = "write_todo"
+
+    desc = """Completely overwrites the current TODO list with a new one provided as a CSV string. 
+
+The input MUST be a valid CSV formatted string containing exactly two columns: 'status' and 'content'. 
+Example format: 'status,content\\ncompleted,Task A\\npending,Task B\\nin_progress,Task C'.
+There should always be one and only one "in_progress" task in the TODO list. 
+This action clears all previous items and replaces them with the new parsed items. 
+NOTICE: you must use this tool VERY frequently.
+"""
+
+    pin = False
+
+    def __init__(self, planning_state: PlanningState, send_msg):
+        super().__init__(planning_state)
+        self.send_msg = send_msg
+
+    def invoke(self, todo_csv: str) -> str:
+        self.planning_state.update(todo_csv)
+        self.planning_state.rounds_since_update = 0
+        self.send_msg(self.render_for_user())
+
+    def inject(self) -> str:
+        if (
+            self.planning_state.rounds_since_update
+            >= self.planning_state.reminder_rounds
+        ):
+            output = f"REMINDER: there are {self.planning_state.rounds_since_update} rounds since last plan update. Refresh your plan ASAP."
+        else:
+            output = ""
+
+        self.planning_state.rounds_since_update += 1
+        return output
+
+
+class TODO:
+    def __init__(self, send_msg):
+        self.planning_state = PlanningState()
+        self.planning_state.items = []
+        self.planning_state.rounds_since_update = 0
+        self.planning_state.reminder_rounds = 8
+        self.send_msg = send_msg
+
+    def tools(self):
+        return [
+            ReadTODOTool(self.planning_state),
+            WriteTODOTool(self.planning_state, self.send_msg),
+        ]
 
 
 class ReadFileTool:
@@ -229,7 +364,7 @@ class ToolsList:
             NotifyUserTool(send_msg),
             LoadSkillTool(),
             BashTool(),
-        ]
+        ] + TODO(send_msg).tools()
         for tool in tools:
             desc = f'def {tool.name}{inspect.signature(tool.invoke)}\n\t"""{tool.desc}"""\n\tpass\n'
             ls.append(
@@ -237,6 +372,7 @@ class ToolsList:
                     "name": tool.name,
                     "desc": desc,
                     "func": tool.invoke,
+                    "inject": getattr(tool, "inject", None),
                     "pin": tool.pin,
                 }
             )
@@ -251,10 +387,23 @@ class ToolsList:
         )
 
     def execute_tool(self, name: str, args: dict):
+        tool_found = False
         for tool in self._tools_list:
-            if name != tool["name"]:
-                continue
-            func = tool["func"]
-            return func(**args), tool["pin"]
+            if name == tool["name"]:
+                func = tool["func"]
+                output = func(**args)
+                pin = tool["pin"]
+                tool_found = True
+                break
 
-        raise ValueError(f'Invalid tool name "{name}"')
+        if not tool_found:
+            raise ValueError(f'Invalid tool name "{name}"')
+
+        additional_output = []
+        for tool in self._tools_list:
+            if tool["inject"] is not None:
+                additional_output.append(tool["inject"]())
+
+        output = output + "\n" + "\n".join(additional_output)
+
+        return output, pin
