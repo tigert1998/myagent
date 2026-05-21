@@ -239,7 +239,7 @@ Returns the standard output, standard error, and return code in a JSON block.
 """
     pin = False
 
-    def invoke(self, cmd: str, timeout: str) -> str:
+    def invoke(self, cmd: str, timeout: str = "10") -> str:
         timeout_num = float(timeout)
         p = subprocess.Popen(
             cmd,
