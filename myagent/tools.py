@@ -21,14 +21,21 @@ def _json_returns(obj):
 
 class ReadFileTool:
     name = "read_file"
-    desc = """Reads the entire content of a specified text file.
-Use this to inspect file contents, configurations, or code. Handles UTF-8 encoding.
+    desc = """Reads and returns a specific chunk of lines from a text file.
+
+Supports pagination by specifying 'offset' (starting line number, 0-based) and 'limit' (number of lines to read). 
+Defaults to reading the first 2000 lines. Ideal for inspecting large files, configurations,
+or code without loading the entire content into memory. Handles UTF-8 encoding.
 """
     pin = False
 
-    def invoke(self, path: str) -> str:
+    def invoke(self, path: str, offset: str = "0", limit: str = "2000") -> str:
+        offset = int(offset)
+        limit = int(limit)
         with open(path, "r", encoding="utf-8") as f:
-            return f.read()
+            content = f.read()
+            lines = content.split("\n")
+            return "\n".join(lines[offset : offset + limit])
 
 
 class WriteFileTool:
