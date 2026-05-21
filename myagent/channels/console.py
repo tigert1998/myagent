@@ -27,7 +27,7 @@ if __name__ == "__main__":
         config = json.load(f)
     llm_client = LLMClient.build(config["llm"])
     tools_list = ToolsList(send_msg, request_msg)
-    idsep_parser = IDSepParser(None)
+    idsep_parser = IDSepParser()
 
     logger = JsonlLogger(
         osp.join(config["channels"]["console"]["log"], f"{time():.3f}.jsonl")

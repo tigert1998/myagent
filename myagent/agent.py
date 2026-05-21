@@ -24,7 +24,11 @@ class Agent:
         with open("prompts/soul.md", "r") as f:
             self.soul = f.read()
         with open("prompts/idsep.md", "r") as f:
-            self.idsep = f.read().format(sepid=self.idsep_parser.sepid)
+            self.idsep = f.read().format(
+                sepidk=self.idsep_parser.sepidk,
+                sepidv=self.idsep_parser.sepidv,
+                sepide=self.idsep_parser.sepide,
+            )
 
 
 class ReActAgent(Agent):
@@ -158,7 +162,9 @@ class ReActAgent(Agent):
             "tools_list": self.tools_list.tools_list_desc(),
             "soul": self.soul,
             "idsep": self.idsep,
-            "sepid": self.idsep_parser.sepid,
+            "sepidk": self.idsep_parser.sepidk,
+            "sepidv": self.idsep_parser.sepidv,
+            "sepide": self.idsep_parser.sepide,
         }
         react_prompt = react_prompt.format(**dic)
 

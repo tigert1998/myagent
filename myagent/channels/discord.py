@@ -74,7 +74,7 @@ class DiscordChannel:
                     osp.join(self.log_path, f"{message.author.id}-{time():.3f}.jsonl")
                 )
                 tools_list = ToolsList(send_msg, request_msg)
-                idsep_parser = IDSepParser(None)
+                idsep_parser = IDSepParser()
                 agent = ReActAgent(
                     "ReActAgent",
                     self.llm_client,

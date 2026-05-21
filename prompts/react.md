@@ -33,50 +33,50 @@
 你必须按照 IDSep 格式处理输入和输出。以下是按照 IDSep 格式组织的执行流程示例：
 
 ```
-{sepid}question{sepid}帮我找一个简单的番茄炒蛋食谱，并看看家里的冰箱里有没有西红柿。{sepid}
+{sepidk}question{sepidv}帮我找一个简单的番茄炒蛋食谱，并看看家里的冰箱里有没有西红柿。{sepide}
 ```
 
 ```
-{sepid}thought{sepid}这个任务包含两个步骤：
+{sepidk}thought{sepidv}这个任务包含两个步骤：
 1. 查找番茄炒蛋食谱；
 2. 检查冰箱里是否有西红柿。
 
-我先调用 find_recipe 工具获取食谱。
-{sepid}action.find_recipe.dish{sepid}番茄炒蛋{sepid}
+我先调用 find_recipe 工具获取食谱。{sepide}
+{sepidk}action.find_recipe.dish{sepidv}番茄炒蛋{sepide}
 ```
 
 ```
-{sepid}observation{sepid}简单的番茄炒蛋食谱：
+{sepidk}observation{sepidv}简单的番茄炒蛋食谱：
 将2个鸡蛋打散，2个番茄切块。
 热油后先炒鸡蛋，盛出。
 再炒番茄至软烂，加入鸡蛋，放盐调味即可。
-{sepid}
+{sepide}
 ```
 
 ```
-{sepid}thought{sepid}已经获得食谱。
-现在需要确认冰箱中是否有西红柿，因此调用 check_fridge 工具。
-{sepid}action.check_fridge.item{sepid}西红柿{sepid}
+{sepidk}thought{sepidv}已经获得食谱。
+现在需要确认冰箱中是否有西红柿，因此调用 check_fridge 工具。{sepide}
+{sepidk}action.check_fridge.item{sepidv}西红柿{sepide}
 ```
 
 ```
-{sepid}observation{sepid}冰箱检查结果：有3个西红柿。{sepid}
+{sepidk}observation{sepidv}冰箱检查结果：有3个西红柿。{sepide}
 ```
 
 ```
-{sepid}thought{sepid}任务已经完成：
+{sepidk}thought{sepidv}任务已经完成：
 - 已找到食谱
 - 已确认冰箱中有西红柿
 
-现在输出最终结果。
-{sepid}final_answer{sepid}简单的番茄炒蛋食谱如下：
+现在输出最终结果。{sepide}
+{sepidk}final_answer{sepidv}简单的番茄炒蛋食谱如下：
 
 鸡蛋打散，番茄切块。
 先炒鸡蛋，再炒番茄，
 最后混合并加盐调味即可。
 
 冰箱里有3个西红柿。
-{sepid}
+{sepide}
 ```
 
 # 输出规范
@@ -110,7 +110,7 @@
 如果任务尚未完成，则必须输出：
 
 ```
-{sepid}action.tool_name.arg_1{sepid}value_1{sepid}action.tool_name.arg_2{sepid}value_2{sepid}...{sepid}action.tool_name.arg_n{sepid}value_n{sepid}
+{sepidk}action.tool_name.arg_1{sepidv}value_1{sepidk}action.tool_name.arg_2{sepidv}value_2{sepidk}...{sepidk}action.tool_name.arg_n{sepidv}value_n{sepide}
 ```
 
 规则：
@@ -127,7 +127,7 @@
 当且仅当任务已经完成时，输出：
 
 ```
-{sepid}final_answer{sepid}任务最终结果{sepid}
+{sepidk}final_answer{sepidv}任务最终结果{sepide}
 ```
 
 要求：
@@ -155,7 +155,7 @@
 则正确调用方式如下：
 
 ```
-{sepid}action.execute_os_command.cmd{sepid}ls -la .{sepid}
+{sepidk}action.execute_os_command.cmd{sepidv}ls -la .{sepide}
 ```
 
 # 工具调用规则
