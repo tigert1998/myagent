@@ -8,6 +8,7 @@ MyAgent 是一个基于 Python 的智能体（Agent）框架，支持多种推�
 - **Plan-and-Execute**: 支持先规划后执行的任务拆解模式。
 - **上下文压缩**: 内置上下文管理机制，优化长上下文场景下的性能。
 - **Skills**: 支持模块化技能扩展，增强智能体能力边界。
+- 多渠道消息接入与分发：当前已支持命令行接口（CLI）及 Discord 机器人两种交互方式。
 
 ## 环境要求
 
@@ -23,10 +24,21 @@ MyAgent 是一个基于 Python 的智能体（Agent）框架，支持多种推�
 
 ```json
 {
-    "provider": "deepseek",
-    "key": "你的 API Key",
-    "url": "https://api.deepseek.com/v1/chat/completions",
-    "model": "模型名称"
+    "llm": {
+        "provider": "deepseek",
+        "key": "你的 API key",
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "model": "deepseek-v4-pro"
+    },
+    "channels": {
+        "console": {
+            "log": "logs"
+        },
+        "discord": {
+            "token": "你的 Discord 机器人 Token",
+            "log": "logs"
+        }
+    }
 }
 ```
 
@@ -34,31 +46,14 @@ MyAgent 是一个基于 Python 的智能体（Agent）框架，支持多种推�
 使用以下命令启动智能体：
 
 ```bash
-uv run python -m myagent.main --config ${CONFIG} --log ${LOG} --query "查一下明天常州市的天气"
+# 启动 CLI 渠道
+uv run python -m myagent.channels.console --config ${CONFIG}
+# 启动 Discord 渠道
+uv run python -m myagent.channels.discord --config ${CONFIG}
 ```
 
 **参数说明：**
 - `--config`: 指定配置文件的路径（例如 `config.json`）。
-- `--log`: 指定日志文件的保存路径（例如 `log.jsonl`）。
-- `--query`: 输入给智能体的自然语言指令。
-
-### 4. 可视化监控
-
-为了便于调试与追踪，项目支持将运行日志以可视化方式展示。
-
-**操作步骤：**
-
-1.  **启动本地服务**
-    在项目根目录下运行以下命令以启动一个简单的 HTTP 服务器：
-    ```bash
-    uv run python -m http.server
-    ```
-
-2.  **查看日志**
-    在浏览器中访问终端提示的地址（默认为 `http://0.0.0.0:8000`），在页面中找到并点击 `log.html` 文件即可查看智能体的实时运行轨迹。
-
-> **注意**：请确保当前目录下已存在运行智能体时生成的 `log.jsonl` 文件。
-
 
 ## 技能管理 (Skills)
 
