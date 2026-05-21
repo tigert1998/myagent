@@ -7,6 +7,83 @@ import os.path as osp
 import frontmatter
 
 
+def _json_returns(obj):
+    return (
+        "```json\n"
+        + json.dumps(
+            obj,
+            indent=4,
+            ensure_ascii=False,
+        )
+        + "\n```\n"
+    )
+
+
+class ReadFileTool:
+    name = "read_file"
+    desc = """Reads the entire content of a specified text file.
+Use this to inspect file contents, configurations, or code. Handles UTF-8 encoding.
+"""
+    pin = False
+
+    def invoke(self, path: str) -> str:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+
+
+class WriteFileTool:
+    name = "write_file"
+    desc = """Overwrites a file with the provided text content.
+WARNING: This will replace the entire file content."""
+    pin = False
+
+    def invoke(self, path: str, content: str) -> str:
+        with open(path, "w") as f:
+            f.write(content)
+        return _json_returns({"success": True})
+
+
+class EditFileTool:
+    name = "edit_file"
+
+    desc = """Use this tool to replace a specific section of text within a file with new content.
+This is the primary way to modify code or text files.
+
+CRITICAL INSTRUCTIONS:
+Exact Match: The old_str must be an exact, character-for-character match of a unique block in the file.
+Include surrounding whitespace or indentation if necessary to ensure uniqueness.
+Uniqueness: Ensure the old_str appears only ONCE in the file to avoid accidental mass replacements.
+If the string appears multiple times, include more context (e.g., surrounding lines) in old_str.
+No Partial Matches: Do not guess; copy the exact text from the file reading tools.
+Path: Provide the relative or absolute path to the target file.
+"""
+
+    pin = False
+
+    def invoke(self, path: str, old_str: str, new_str: str) -> str:
+        with open(path, "r") as f:
+            content = f.read()
+        num_matches = content.count(old_str)
+        if num_matches != 1:
+            return _json_returns(
+                {
+                    "success": False,
+                    "num_matches": num_matches,
+                    "num_replaces": 0,
+                }
+            )
+        content = content.replace(old_str, new_str)
+        with open(path, "w") as f:
+            f.write(content)
+        return _json_returns(
+            {
+                "success": True,
+                "num_matches": num_matches,
+                "num_replaces": num_matches,
+            }
+        )
+
+
 class BashTool:
     name = "bash"
     desc = """Executes a bash command with timeout from the command line.
@@ -25,18 +102,12 @@ Returns the standard output, standard error, and return code in a JSON block.
             text=True,
         )
         stdout, stderr = p.communicate(timeout=timeout_num)
-        return (
-            "```json\n"
-            + json.dumps(
-                {
-                    "stdout": stdout,
-                    "stderr": stderr,
-                    "returncode": p.returncode,
-                },
-                indent=4,
-                ensure_ascii=False,
-            )
-            + "\n```\n"
+        return _json_returns(
+            {
+                "stdout": stdout,
+                "stderr": stderr,
+                "returncode": p.returncode,
+            }
         )
 
 
@@ -79,16 +150,10 @@ the user about the current state of the workflow.
 
     def invoke(self, content: str) -> str:
         self.send_msg(content)
-        return (
-            "```json\n"
-            + json.dumps(
-                {
-                    "success": True,
-                },
-                indent=4,
-                ensure_ascii=False,
-            )
-            + "\n```\n"
+        return _json_returns(
+            {
+                "success": True,
+            }
         )
 
 
@@ -150,6 +215,9 @@ class ToolsList:
     def _register_tools(send_msg, request_msg):
         ls = []
         tools = [
+            ReadFileTool(),
+            WriteFileTool(),
+            EditFileTool(),
             AskUserTool(send_msg, request_msg),
             NotifyUserTool(send_msg),
             LoadSkillTool(),
