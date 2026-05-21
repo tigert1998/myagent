@@ -16,6 +16,8 @@ class Agent:
         self.name = name
         self.llm_client = llm_client
         self.tools_list = tools_list
+        with open("prompts/soul.md", "r") as f:
+            self.soul = f.read()
 
 
 class ReActAgent(Agent):
@@ -154,6 +156,7 @@ class ReActAgent(Agent):
             "pwd": os.getcwd(),
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "tools_list": self.tools_list.tools_list_desc(),
+            "soul": self.soul,
         }
         react_prompt = react_prompt.format(**dic)
 
@@ -264,6 +267,7 @@ class PlanAndExecuteAgent(Agent):
             "pwd": os.getcwd(),
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "tools_list": self.tools_list.tools_list_desc(),
+            "soul": self.soul,
         }
         planner_prompt = planner_prompt.format(**dic)
 
