@@ -11,6 +11,13 @@ from myagent.tools import ToolsList
 from myagent.llm_client import LLMClient
 
 
+def _build_single_xml_node(name, content):
+    soup = BeautifulSoup(features="xml")
+    node = soup.new_tag(name)
+    node.string = content
+    return node
+
+
 class Agent:
     def __init__(self, name, llm_client: LLMClient, tools_list: ToolsList):
         self.name = name
@@ -47,16 +54,9 @@ class ReActAgent(Agent):
             if not isinstance(j, Tag):
                 continue
             argument_name = j.name
-            argument_value = j.text
+            argument_value = j.decode_contents()
             dic[argument_name] = argument_value
         return tool_name, dic
-
-    @staticmethod
-    def _build_single_node_xml(name, content):
-        soup = BeautifulSoup(features="xml")
-        node = soup.new_tag(name)
-        node.string = content
-        return node
 
     def _summarize(self, history):
         with open("prompts/summarizer.md", "r") as f:
@@ -78,7 +78,7 @@ class ReActAgent(Agent):
         ]
 
         _, content = self.llm_client.call(messages)
-        summarization = ReActAgent._build_single_node_xml("summarization", content)
+        summarization = _build_single_xml_node("summarization", content)
         self.logger.log(self.name, "阶段总结", str(summarization))
         return content
 
@@ -90,7 +90,7 @@ class ReActAgent(Agent):
             raise ValueError(f"Content format is incorrect:\n{content}")
 
         if soup.thought is None:
-            thought = ReActAgent._build_single_node_xml("thought", "")
+            thought = _build_single_xml_node("thought", "")
         else:
             thought = soup.thought
 
@@ -107,7 +107,7 @@ class ReActAgent(Agent):
         except:
             output = traceback.format_exc()
             pin = False
-        observation = ReActAgent._build_single_node_xml("observation", output)
+        observation = _build_single_xml_node("observation", output)
         self.logger.log(self.name, "观察结果", str(observation))
 
         messages = messages + [
@@ -160,7 +160,7 @@ class ReActAgent(Agent):
         }
         react_prompt = react_prompt.format(**dic)
 
-        node = ReActAgent._build_single_node_xml("question", query)
+        node = _build_single_xml_node("question", query)
         messages = [
             {
                 "role": "system",
@@ -190,13 +190,6 @@ class PlanAndExecuteAgent(Agent):
         self.num_retries = num_retries
 
     @staticmethod
-    def _build_single_node_xml(name, content):
-        soup = BeautifulSoup(features="xml")
-        node = soup.new_tag(name)
-        node.string = content
-        return node
-
-    @staticmethod
     def _parse_plan_tag(plan: Tag):
         steps = []
         for j in plan.children:
@@ -219,7 +212,7 @@ class PlanAndExecuteAgent(Agent):
             raise ValueError(f"Content format is incorrect:\n{content}")
         thought = soup.thought
         if thought is None:
-            thought = PlanAndExecuteAgent._build_single_node_xml("thought", "")
+            thought = _build_single_xml_node("thought", "")
         if soup.final_plan is not None:
             self.logger.log(self.name, "思考", str(thought))
             self.logger.log(self.name, "最终计划", str(soup.final_plan))
@@ -239,7 +232,7 @@ class PlanAndExecuteAgent(Agent):
             },
         )
 
-        node = PlanAndExecuteAgent._build_single_node_xml("audit", audit)
+        node = _build_single_xml_node("audit", audit)
         messages = messages + [
             {"role": "assistant", "content": str(thought) + (str(soup.plan))},
             {"role": "user", "content": str(node)},
@@ -271,7 +264,7 @@ class PlanAndExecuteAgent(Agent):
         }
         planner_prompt = planner_prompt.format(**dic)
 
-        node = PlanAndExecuteAgent._build_single_node_xml("question", query)
+        node = _build_single_xml_node("question", query)
         messages = [
             {"role": "system", "content": planner_prompt},
             {
