@@ -7,6 +7,7 @@ from myagent.llm_client import LLMClient
 from myagent.tools import ToolsList
 from myagent.agent import PlanAndExecuteAgent, ReActAgent
 from myagent.loggers import JsonlLogger, TerminalLogger
+from myagent.idsep_parser import IDSepParser
 
 
 def send_msg(content):
@@ -27,6 +28,7 @@ if __name__ == "__main__":
         config = json.load(f)
     llm_client = LLMClient.build(config["llm"])
     tools_list = ToolsList(send_msg, request_msg)
+    idsep_parser = IDSepParser(None)
 
     logger = JsonlLogger(
         osp.join(config["channels"]["console"]["log"], f"{time():.3f}.jsonl")
@@ -37,6 +39,7 @@ if __name__ == "__main__":
             "PlanAndExecuteAgent",
             llm_client,
             tools_list,
+            idsep_parser,
             logger,
             num_retries=3,
         )
@@ -45,6 +48,7 @@ if __name__ == "__main__":
             "ReActAgent",
             llm_client,
             tools_list,
+            idsep_parser,
             logger,
             num_retries=3,
         )

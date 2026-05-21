@@ -10,10 +10,10 @@ class JsonlLogger:
         os.makedirs(osp.dirname(filename), exist_ok=True)
         self.f = open(filename, "w")
 
-    def log(self, agent, section, content):
+    def log(self, agent, content):
         self.f.write(
             json.dumps(
-                {"agent": agent, "section": section, "content": content},
+                {"agent": agent, "content": content},
                 ensure_ascii=False,
             )
             + "\n"
