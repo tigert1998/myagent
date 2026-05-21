@@ -142,8 +142,8 @@ class ReActAgent(Agent):
         for _ in range(self.num_retries + 1):
             try:
                 return self._try_one_iter(messages)
-            except:
-                exception = traceback.format_exc()
+            except Exception as e:
+                exception = e
         raise exception
 
     def run(self, query) -> str:
@@ -251,8 +251,8 @@ class PlanAndExecuteAgent(Agent):
         for _ in range(self.num_retries + 1):
             try:
                 return self._try_one_iter(messages)
-            except:
-                exception = traceback.format_exc()
+            except Exception as e:
+                exception = e
         raise exception
 
     def _plan(self, query):

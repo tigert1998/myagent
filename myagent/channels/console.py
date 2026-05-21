@@ -1,5 +1,7 @@
 import argparse
 import json
+import os.path as osp
+from time import time
 
 from myagent.llm_client import LLMClient
 from myagent.tools import ToolsList
@@ -18,7 +20,6 @@ def request_msg():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("MyAgent console")
     parser.add_argument("--config")
-    parser.add_argument("--query")
     parser.add_argument("--plan-mode", action="store_true")
     args = parser.parse_args()
 
@@ -27,7 +28,9 @@ if __name__ == "__main__":
     llm_client = LLMClient.build(config["llm"])
     tools_list = ToolsList(send_msg, request_msg)
 
-    logger = JsonlLogger(config["log"])
+    logger = JsonlLogger(
+        osp.join(config["channels"]["console"]["log"], f"{time():.3f}.jsonl")
+    )
 
     if args.plan_mode:
         agent = PlanAndExecuteAgent(
@@ -46,5 +49,5 @@ if __name__ == "__main__":
             num_retries=3,
         )
 
-    TerminalLogger.instance().prompt("User queries", args.query)
-    answer = agent.run(args.query)
+    query = TerminalLogger.instance().prompt("User queries", None)
+    answer = agent.run(query)

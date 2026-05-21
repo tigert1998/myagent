@@ -3,6 +3,8 @@ import threading
 import asyncio
 import argparse
 import traceback
+import os.path as osp
+from time import time
 
 import discord
 
@@ -14,35 +16,23 @@ from myagent.tools import ToolsList
 
 class DiscordChannel:
     def __init__(self, llm_config, token, log_path):
-        llm_client = LLMClient.build(llm_config)
+        self.llm_client = LLMClient.build(llm_config)
         self.token = token
         self.log_path = log_path
 
-        self.agent_running = False
-        self.channel = None
+        self.agents_running = {}
 
         intents = discord.Intents.default()
         intents.message_content = True
         self.client = discord.Client(intents=intents)
-
-        tools_list = ToolsList(self.send_msg, self.request_msg)
-        logger = JsonlLogger(self.log_path)
-        self.agent = PlanAndExecuteAgent(
-            "PlanAndExecuteAgent",
-            llm_client,
-            tools_list,
-            logger,
-            num_retries=3,
-        )
-
         self.client.event(self.on_message)
 
-    def request_msg(self):
+    def request_msg(self, channel, user_id):
         async def get_next_user_message():
             def check(m: discord.Message):
                 return (
-                    m.channel.id == self.channel.id
-                    and m.author != self.client.user
+                    m.channel.id == channel.id
+                    and m.author.id == user_id
                     and self.client.user in m.mentions
                 )
 
@@ -54,12 +44,11 @@ class DiscordChannel:
         )
         return future.result()
 
-    def send_msg(self, content):
-        if self.channel is not None:
-            future = asyncio.run_coroutine_threadsafe(
-                self.channel.send(content), self.client.loop
-            )
-            future.result()
+    def send_msg(self, channel, user_id, content):
+        future = asyncio.run_coroutine_threadsafe(
+            channel.send(f"<@{user_id}> {content}"), self.client.loop
+        )
+        future.result()
 
     async def on_message(self, message: discord.Message):
         if (
@@ -68,26 +57,36 @@ class DiscordChannel:
         ):
             return
 
-        if self.agent_running:
+        if self.agents_running.get(message.author.id, False):
             return
 
-        self.channel = message.channel
-
         def run_agent_in_thread():
-            self.agent_running = True
+            self.agents_running[message.author.id] = True
+            send_msg = lambda content: self.send_msg(
+                channel=message.channel, user_id=message.author.id, content=content
+            )
+            request_msg = lambda: self.request_msg(
+                channel=message.channel, user_id=message.author.id
+            )
             try:
-                self.agent.logger = JsonlLogger(self.log_path)
-                self.agent.run(message.content)
+                logger = JsonlLogger(
+                    osp.join(self.log_path, f"{message.author.id}-{time():.3f}.jsonl")
+                )
+                tools_list = ToolsList(send_msg, request_msg)
+                agent = PlanAndExecuteAgent(
+                    "PlanAndExecuteAgent",
+                    self.llm_client,
+                    tools_list,
+                    logger,
+                    num_retries=3,
+                )
+                agent.run(message.content)
             except:
                 error_msg = traceback.format_exc()
                 error_msg = error_msg[-1900:]
-                future = asyncio.run_coroutine_threadsafe(
-                    self.channel.send(f"MyAgent crashes:\n```\n{error_msg}\n```\n"),
-                    self.client.loop,
-                )
-                future.result()
+                send_msg(f"**MyAgent crashes:**\n```\n{error_msg}\n```\n")
             finally:
-                self.agent_running = False
+                self.agents_running[message.author.id] = False
 
         threading.Thread(target=run_agent_in_thread, daemon=True).start()
 
@@ -103,6 +102,8 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = json.load(f)
     discord_channel = DiscordChannel(
-        config["llm"], config["channels"]["discord"], config["log"]
+        config["llm"],
+        config["channels"]["discord"]["token"],
+        config["channels"]["discord"]["log"],
     )
     discord_channel.run()

@@ -1,10 +1,13 @@
 import json
 import colorama
 from datetime import datetime
+import os.path as osp
+import os
 
 
 class JsonlLogger:
     def __init__(self, filename):
+        os.makedirs(osp.dirname(filename), exist_ok=True)
         self.f = open(filename, "w")
 
     def log(self, agent, section, content):
