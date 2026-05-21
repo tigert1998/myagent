@@ -8,10 +8,11 @@ from time import time
 
 import discord
 
-from myagent.agent import PlanAndExecuteAgent
+from myagent.agent import ReActAgent
 from myagent.llm_client import LLMClient
 from myagent.loggers import JsonlLogger
 from myagent.tools import ToolsList
+from myagent.idsep_parser import IDSepParser
 
 
 class DiscordChannel:
@@ -73,10 +74,12 @@ class DiscordChannel:
                     osp.join(self.log_path, f"{message.author.id}-{time():.3f}.jsonl")
                 )
                 tools_list = ToolsList(send_msg, request_msg)
-                agent = PlanAndExecuteAgent(
-                    "PlanAndExecuteAgent",
+                idsep_parser = IDSepParser(None)
+                agent = ReActAgent(
+                    "ReActAgent",
                     self.llm_client,
                     tools_list,
+                    idsep_parser,
                     logger,
                     num_retries=3,
                 )

@@ -10,7 +10,7 @@ IDSep 采用 `$ID` Key `$ID` Value 的循环结构进行编码。
 假设有一组键值对：`k1: v1, k2: v2, ..., kn: vn`。
 
 其对应的 IDSep 编码结果为：
-```text
+```
 $ID k1 $ID v1 $ID k2 $ID v2 $ID ... $ID kn $ID vn $ID
 ```
 

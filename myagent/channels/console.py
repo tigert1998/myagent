@@ -5,7 +5,7 @@ from time import time
 
 from myagent.llm_client import LLMClient
 from myagent.tools import ToolsList
-from myagent.agent import PlanAndExecuteAgent, ReActAgent
+from myagent.agent import ReActAgent
 from myagent.loggers import JsonlLogger, TerminalLogger
 from myagent.idsep_parser import IDSepParser
 
@@ -21,7 +21,6 @@ def request_msg():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("MyAgent console")
     parser.add_argument("--config")
-    parser.add_argument("--plan-mode", action="store_true")
     args = parser.parse_args()
 
     with open(args.config, "r") as f:
@@ -33,25 +32,14 @@ if __name__ == "__main__":
     logger = JsonlLogger(
         osp.join(config["channels"]["console"]["log"], f"{time():.3f}.jsonl")
     )
-
-    if args.plan_mode:
-        agent = PlanAndExecuteAgent(
-            "PlanAndExecuteAgent",
-            llm_client,
-            tools_list,
-            idsep_parser,
-            logger,
-            num_retries=3,
-        )
-    else:
-        agent = ReActAgent(
-            "ReActAgent",
-            llm_client,
-            tools_list,
-            idsep_parser,
-            logger,
-            num_retries=3,
-        )
+    agent = ReActAgent(
+        "ReActAgent",
+        llm_client,
+        tools_list,
+        idsep_parser,
+        logger,
+        num_retries=3,
+    )
 
     query = TerminalLogger.instance().prompt("User queries", None)
     answer = agent.run(query)

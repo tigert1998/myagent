@@ -26,7 +26,7 @@
 6. 重复上述流程，直到任务完成
 7. 输出最终结果（final_answer）
 
-{idsep_desc}
+{idsep}
 
 # 标准执行示例
 
