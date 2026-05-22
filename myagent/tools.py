@@ -164,9 +164,14 @@ This action clears all previous items and replaces them with the new parsed item
             self.planning_state.rounds_since_update
             >= self.planning_state.reminder_rounds
         ):
-            output: str = (
-                f"REMINDER: there are {self.planning_state.rounds_since_update} rounds since last plan update. Update your plan with {self.name} tool ASAP."
-            )
+            if len(self.planning_state.items) == 0:
+                output: str = (
+                    f"REMINDER: You have not created a todo list yet. Create one with `{self.name}` tool if your task is complicated or involves multiple steps."
+                )
+            else:
+                output: str = (
+                    f"REMINDER: There are {self.planning_state.rounds_since_update} rounds since last plan update. Update your plan with `{self.name}` tool ASAP."
+                )
         else:
             output = ""
 
@@ -193,23 +198,19 @@ class ReadFileTool(Tool):
     name: str = "read_file"
     desc: str = """Reads and returns a specific chunk of lines from a text file.
 
-Supports pagination by specifying 'offset' (starting line number, 0-based) and 'limit' (number of lines to read). 
+Supports pagination by specifying 'offset' (starting line number, 1-based) and 'limit' (number of lines to read). 
 Defaults to reading the first 2000 lines. Ideal for inspecting large files, configurations,
 or code without loading the entire content into memory. Handles UTF-8 encoding.
 """
     pin: bool = False
 
-    def invoke(self, path: str, offset: str = "0", limit: str = "2000") -> str:
-        offset_int: int = int(offset)
-        limit_int: int = int(limit)
+    def invoke(self, path: str, offset: str = "1", limit: str = "2000") -> str:
+        l: int = int(offset) - 1
+        r: int = l + int(limit)
         with open(path, "r", encoding="utf-8") as f:
             content: str = f.read()
             lines: list[str] = content.split("\n")
-            return (
-                "```\n"
-                + "\n".join(lines[offset_int : offset_int + limit_int])
-                + "\n```\n"
-            )
+            return "```\n" + "\n".join(lines[l:r]) + "\n```\n"
 
 
 class WriteFileTool(Tool):
