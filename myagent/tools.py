@@ -3,7 +3,7 @@ import json
 import inspect
 import os
 import os.path as osp
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Optional
 import csv
 import io
 
@@ -39,7 +39,7 @@ class PlanItem:
 
 
 class PlanningState:
-    items: List[PlanItem]
+    items: list[PlanItem]
     rounds_since_update: int
     reminder_rounds: int
 
@@ -132,7 +132,9 @@ This action clears all previous items and replaces them with the new parsed item
     pin: bool = False
     send_msg: Callable[[str], None]
 
-    def __init__(self, planning_state: PlanningState, send_msg: Callable[[str], None]) -> None:
+    def __init__(
+        self, planning_state: PlanningState, send_msg: Callable[[str], None]
+    ) -> None:
         super().__init__(planning_state)
         self.send_msg = send_msg
 
@@ -147,7 +149,9 @@ This action clears all previous items and replaces them with the new parsed item
             self.planning_state.rounds_since_update
             >= self.planning_state.reminder_rounds
         ):
-            output: str = f"REMINDER: there are {self.planning_state.rounds_since_update} rounds since last plan update. Update your plan with {self.name} tool ASAP."
+            output: str = (
+                f"REMINDER: there are {self.planning_state.rounds_since_update} rounds since last plan update. Update your plan with {self.name} tool ASAP."
+            )
         else:
             output = ""
 
@@ -186,7 +190,11 @@ or code without loading the entire content into memory. Handles UTF-8 encoding.
         with open(path, "r", encoding="utf-8") as f:
             content: str = f.read()
             lines: list[str] = content.split("\n")
-            return "```\n" + "\n".join(lines[offset_int : offset_int + limit_int]) + "\n```\n"
+            return (
+                "```\n"
+                + "\n".join(lines[offset_int : offset_int + limit_int])
+                + "\n```\n"
+            )
 
 
 class WriteFileTool:
@@ -285,7 +293,9 @@ continue the task.
     send_msg: Callable[[str], None]
     request_msg: Callable[[], str]
 
-    def __init__(self, send_msg: Callable[[str], None], request_msg: Callable[[], str]) -> None:
+    def __init__(
+        self, send_msg: Callable[[str], None], request_msg: Callable[[], str]
+    ) -> None:
         self.send_msg = send_msg
         self.request_msg = request_msg
 
@@ -391,7 +401,9 @@ class ToolsList:
             BashTool(),
         ] + TODO(send_msg).tools()
         for tool in tools:
-            desc: str = f'def {tool.name}{inspect.signature(tool.invoke)}\n\t"""{tool.desc}"""\n\tpass\n'
+            desc: str = (
+                f'def {tool.name}{inspect.signature(tool.invoke)}\n\t"""{tool.desc}"""\n\tpass\n'
+            )
             ls.append(
                 {
                     "name": tool.name,
@@ -403,7 +415,9 @@ class ToolsList:
             )
         return ls
 
-    def __init__(self, send_msg: Callable[[str], None], request_msg: Callable[[], str]) -> None:
+    def __init__(
+        self, send_msg: Callable[[str], None], request_msg: Callable[[], str]
+    ) -> None:
         self._tools_list = ToolsList._register_tools(send_msg, request_msg)
 
     def tools_list_desc(self) -> str:

@@ -7,16 +7,16 @@ from typing import Any
 from myagent.llm_client import LLMClient
 from myagent.tools import ToolsList
 from myagent.agent import ReActAgent
-from myagent.loggers import JsonlLogger, TerminalLogger
+from myagent.loggers import JsonlLogger, TerminalPrompter
 from myagent.idsep_parser import IDSepParser
 
 
 def send_msg(content: str) -> None:
-    TerminalLogger.instance().prompt("MyAgent updates", content)
+    TerminalPrompter.instance().prompt("MyAgent updates", content)
 
 
 def request_msg() -> str:
-    return TerminalLogger.instance().prompt("User replies", None) or ""
+    return TerminalPrompter.instance().prompt("User replies", None) or ""
 
 
 if __name__ == "__main__":
@@ -42,5 +42,5 @@ if __name__ == "__main__":
         num_retries=3,
     )
 
-    query: str = TerminalLogger.instance().prompt("User queries", None) or ""
+    query: str = TerminalPrompter.instance().prompt("User queries", None) or ""
     answer: str = agent.run(query)

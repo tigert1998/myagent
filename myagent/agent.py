@@ -5,6 +5,7 @@ from datetime import datetime
 import traceback
 from typing import Any
 
+from myagent.loggers import Logger
 from myagent.tools import ToolsList
 from myagent.llm_client import LLMClient
 from myagent.idsep_parser import IDSepParser
@@ -39,14 +40,14 @@ class ReActAgent(Agent):
         llm_client: LLMClient,
         tools_list: ToolsList,
         idsep_parser: IDSepParser,
-        logger: Any,
+        logger: Logger,
         num_retries: int,
         summarize_num: int = 128,
         summarize_keep_latest_num: int = 8,
     ) -> None:
         super().__init__(name, llm_client, tools_list, idsep_parser)
 
-        self.logger: Any = logger
+        self.logger: Logger = logger
         self.num_retries: int = num_retries
         self.summarize_num: int = summarize_num
         self.summarize_keep_latest_num: int = summarize_keep_latest_num
@@ -95,7 +96,9 @@ class ReActAgent(Agent):
         self.logger.log(self.name, {"summarization": content})
         return content
 
-    def _try_one_iter(self, messages: list[dict[str, Any]]) -> tuple[list[dict[str, Any]] | None, str | None]:
+    def _try_one_iter(
+        self, messages: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]] | None, str | None]:
         _, content = self.llm_client.call(messages)
 
         obj: dict[str, Any] = self._parse_idsep(content)
@@ -153,7 +156,9 @@ class ReActAgent(Agent):
 
         return messages, None
 
-    def _retry_one_iter(self, messages: list[dict[str, Any]]) -> tuple[list[dict[str, Any]] | None, str | None]:
+    def _retry_one_iter(
+        self, messages: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]] | None, str | None]:
         for _ in range(self.num_retries + 1):
             try:
                 return self._try_one_iter(messages)

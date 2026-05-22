@@ -4,8 +4,8 @@ import requests
 
 class LLMClient:
     def call(self, messages: list[dict[str, Any]]) -> tuple[str, str]:
-        """调用 LLM，返回 (reasoning_content, content) 元组。"""
-        raise NotImplementedError
+        """Returns (reasoning_content, content)."""
+        raise NotImplementedError()
 
     @staticmethod
     def build(config: dict[str, Any]) -> "LLMClient":
@@ -21,7 +21,9 @@ class LLMClient:
 
 
 class DeepSeekClient(LLMClient):
-    def __init__(self, url: str, model: str, key: str, other_configs: dict[str, Any]) -> None:
+    def __init__(
+        self, url: str, model: str, key: str, other_configs: dict[str, Any]
+    ) -> None:
         self.url: str = url
         self.model: str = model
         self.key: str = key
@@ -39,7 +41,9 @@ class DeepSeekClient(LLMClient):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.key}",
         }
-        response: requests.Response = requests.post(url=self.url, headers=headers, json=payload)
+        response: requests.Response = requests.post(
+            url=self.url, headers=headers, json=payload
+        )
         response.raise_for_status()
         response_data: dict[str, Any] = response.json()
         message: dict[str, Any] = response_data["choices"][0]["message"]

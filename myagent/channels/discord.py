@@ -47,7 +47,9 @@ class DiscordChannel:
         )
         return future.result()
 
-    def send_msg(self, channel: discord.TextChannel, user_id: int, content: str) -> None:
+    def send_msg(
+        self, channel: discord.TextChannel, user_id: int, content: str
+    ) -> None:
         future: Future[discord.Message] = asyncio.run_coroutine_threadsafe(
             channel.send(f"<@{user_id}> {content}"), self.client.loop
         )
