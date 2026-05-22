@@ -1,7 +1,4 @@
 import json
-import platform
-import os
-from datetime import datetime
 import traceback
 from typing import Any
 
@@ -110,7 +107,7 @@ class ReActAgent(Agent):
         try:
             observation, pin = self.tools_list.execute_tool(tool, args)
         except:
-            observation: str = traceback.format_exc()
+            observation = traceback.format_exc()
             pin = False
         observation_obj: dict[str, str] = {"observation": observation}
         self.logger.log(self.name, observation_obj)

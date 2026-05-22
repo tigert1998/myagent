@@ -352,9 +352,9 @@ def _skill_doc_inject_envs(content: str, skill_dir: str) -> str:
 class LoadSkillTool(Tool):
     name: str = "load_skill"
 
-    @property
-    def desc(self) -> str:
-        return f"""Load the `SKILL.md` of a specific skill by name.
+    def __init__(self) -> None:
+        super().__init__()
+        self.desc = f"""Load the `SKILL.md` of a specific skill by name.
 
 A skill is a reusable capability package that typically includes a `SKILL.md` file
 describing what the skill does, when it should be used, and any related instructions or requirements.

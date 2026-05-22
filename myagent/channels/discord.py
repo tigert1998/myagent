@@ -40,7 +40,7 @@ class DiscordChannel:
                 )
 
             msg: discord.Message = await self.client.wait_for("message", check=check)
-            return msg.content
+            return msg.clean_content
 
         future: Future[str] = asyncio.run_coroutine_threadsafe(
             get_next_user_message(), self.client.loop
@@ -62,16 +62,20 @@ class DiscordChannel:
         ):
             return
 
+        channel = message.channel
+        if not isinstance(channel, discord.TextChannel):
+            return
+
         if self.agents_running.get(message.author.id, False):
             return
 
         def run_agent_in_thread() -> None:
             self.agents_running[message.author.id] = True
             send_msg: Callable[[str], None] = lambda content: self.send_msg(
-                channel=message.channel, user_id=message.author.id, content=content
+                channel=channel, user_id=message.author.id, content=content
             )
             request_msg: Callable[[], str] = lambda: self.request_msg(
-                channel=message.channel, user_id=message.author.id
+                channel=channel, user_id=message.author.id
             )
             try:
                 logger: JsonlLogger = JsonlLogger(
@@ -87,7 +91,7 @@ class DiscordChannel:
                     logger,
                     num_retries=3,
                 )
-                agent.run(message.content)
+                agent.run(message.clean_content)
             except:
                 error_msg: str = traceback.format_exc()
                 error_msg = error_msg[-1900:]

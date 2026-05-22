@@ -1,7 +1,7 @@
 [project]
 name = "myagent"
 version = "0.1.0"
-description = "My agent"
+description = "MyAgent"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
@@ -11,4 +11,10 @@ dependencies = [
     "lxml>=6.1.0",
     "python-frontmatter>=1.2.0",
     "requests>=2.34.2",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.1.0",
+    "types-colorama>=0.4.15.20260508",
 ]
