@@ -9,6 +9,7 @@ from myagent.loggers import Logger
 from myagent.tools import ToolsList
 from myagent.llm_client import LLMClient
 from myagent.idsep_parser import IDSepParser
+from myagent.prompt import load_prompt
 
 
 class Agent:
@@ -23,14 +24,6 @@ class Agent:
         self.llm_client: LLMClient = llm_client
         self.tools_list: ToolsList = tools_list
         self.idsep_parser: IDSepParser = idsep_parser
-        with open("prompts/soul.md", "r") as f:
-            self.soul: str = f.read()
-        with open("prompts/idsep.md", "r") as f:
-            self.idsep: str = f.read().format(
-                sepidk=self.idsep_parser.sepidk,
-                sepidv=self.idsep_parser.sepidv,
-                sepide=self.idsep_parser.sepide,
-            )
 
 
 class ReActAgent(Agent):
@@ -69,21 +62,17 @@ class ReActAgent(Agent):
         return ans
 
     def _summarize(self, history: list[dict[str, Any]]) -> str:
-        with open("prompts/summarizer.md", "r") as f:
-            summarizer_prompt: str = f.read()
-
         history_objs: list[dict[str, Any]] = []
         for m in history[1:]:
             obj: dict[str, Any] = self._parse_idsep(m["content"])
             history_objs.append({"role": m["role"], "content": obj})
 
-        dic: dict[str, str] = {
-            "os": platform.platform(),
-            "pwd": os.getcwd(),
-            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "history": json.dumps(history_objs, indent=4, ensure_ascii=False),
-        }
-        summarizer_prompt = summarizer_prompt.format(**dic)
+        summarizer_prompt = load_prompt(
+            "prompts/summarizer.md",
+            {
+                "history": json.dumps(history_objs, indent=4, ensure_ascii=False),
+            },
+        )
 
         messages: list[dict[str, str]] = [
             {
@@ -167,20 +156,15 @@ class ReActAgent(Agent):
         raise exception
 
     def run(self, query: str) -> str:
-        with open("prompts/react.md", "r") as f:
-            react_prompt: str = f.read()
-        dic: dict[str, str] = {
-            "os": platform.platform(),
-            "pwd": os.getcwd(),
-            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "tools_list": self.tools_list.tools_list_desc(),
-            "soul": self.soul,
-            "idsep": self.idsep,
-            "sepidk": self.idsep_parser.sepidk,
-            "sepidv": self.idsep_parser.sepidv,
-            "sepide": self.idsep_parser.sepide,
-        }
-        react_prompt = react_prompt.format(**dic)
+        react_prompt = load_prompt(
+            "prompts/react.md",
+            {
+                "tools_list": self.tools_list.tools_list_desc(),
+                "sepidk": self.idsep_parser.sepidk,
+                "sepidv": self.idsep_parser.sepidv,
+                "sepide": self.idsep_parser.sepide,
+            },
+        )
 
         question_obj: dict[str, str] = {"question": query}
         messages: list[dict[str, Any]] = [

@@ -36,10 +36,10 @@
 历史会话如下所示：
 
 ```json
-{history}
+@{MYAGENT:history}
 ```
 
 # 环境信息
-- 操作系统：{os}
-- 当前目录：{pwd}
-- 当前时间：{time}
+- 操作系统：@{MYAGENT:OS}
+- 当前目录：@{MYAGENT:PWD}
+- 当前时间：@{MYAGENT:TIME}
