@@ -22,6 +22,21 @@ def _json_returns(obj: Any) -> str:
     )
 
 
+class Tool:
+    name: str
+    desc: str
+    pin: bool
+
+    def invoke(self, *args, **kwargs) -> str:
+        raise NotImplementedError()
+
+    def inject(self) -> Optional[str]:
+        return None
+
+    def signature(self) -> str:
+        return f'def {self.name}{inspect.signature(self.invoke)}\n\t"""{self.desc}"""\n\tpass\n'
+
+
 class PlanItem:
     content: str
     status: str
@@ -67,7 +82,7 @@ class PlanningState:
             )
 
 
-class TODOTool:
+class TODOTool(Tool):
     planning_state: PlanningState
 
     def __init__(self, planning_state: PlanningState) -> None:
@@ -159,7 +174,7 @@ This action clears all previous items and replaces them with the new parsed item
         return output
 
 
-class TODO:
+class TODOManager:
     planning_state: PlanningState
     send_msg: Callable[[str], None]
 
@@ -167,14 +182,14 @@ class TODO:
         self.planning_state = PlanningState()
         self.send_msg = send_msg
 
-    def tools(self) -> list[ReadTODOTool | WriteTODOTool]:
+    def tools(self) -> list[TODOTool]:
         return [
             ReadTODOTool(self.planning_state),
             WriteTODOTool(self.planning_state, self.send_msg),
         ]
 
 
-class ReadFileTool:
+class ReadFileTool(Tool):
     name: str = "read_file"
     desc: str = """Reads and returns a specific chunk of lines from a text file.
 
@@ -197,7 +212,7 @@ or code without loading the entire content into memory. Handles UTF-8 encoding.
             )
 
 
-class WriteFileTool:
+class WriteFileTool(Tool):
     name: str = "write_file"
     desc: str = """Overwrites a file with the provided text content.
 WARNING: This will replace the entire file content."""
@@ -209,7 +224,7 @@ WARNING: This will replace the entire file content."""
         return _json_returns({"success": True})
 
 
-class EditFileTool:
+class EditFileTool(Tool):
     name: str = "edit_file"
 
     desc: str = """Use this tool to replace a specific section of text within a file with new content.
@@ -250,7 +265,7 @@ Path: Provide the relative or absolute path to the target file.
         )
 
 
-class BashTool:
+class BashTool(Tool):
     name: str = "bash"
     desc: str = """Executes a bash command with timeout from the command line.
 Returns the standard output, standard error, and return code in a JSON block.
@@ -279,7 +294,7 @@ Returns the standard output, standard error, and return code in a JSON block.
         )
 
 
-class AskUserTool:
+class AskUserTool(Tool):
     name: str = "ask_user"
 
     desc: str = """Request additional input or clarification directly from the user.
@@ -304,7 +319,7 @@ continue the task.
         return "> " + self.request_msg() + "\n"
 
 
-class NotifyUserTool:
+class NotifyUserTool(Tool):
     name: str = "notify_user"
 
     desc: str = """Send an informational message or progress update to the user.
@@ -334,7 +349,7 @@ def _skill_doc_inject_envs(content: str, skill_dir: str) -> str:
     return content.replace("${CLAUDE_SKILL_DIR}", skill_dir)
 
 
-class LoadSkillTool:
+class LoadSkillTool(Tool):
     name: str = "load_skill"
 
     @property
@@ -384,14 +399,13 @@ The list of skills:
 
 
 class ToolsList:
-    _tools_list: list[dict[str, Any]]
+    _tools_list: list[Tool]
 
     @staticmethod
     def _register_tools(
         send_msg: Callable[[str], None], request_msg: Callable[[], str]
-    ) -> list[dict[str, Any]]:
-        ls: list[dict[str, Any]] = []
-        tools: list[Any] = [
+    ) -> list[Tool]:
+        return [
             ReadFileTool(),
             WriteFileTool(),
             EditFileTool(),
@@ -399,21 +413,7 @@ class ToolsList:
             NotifyUserTool(send_msg),
             LoadSkillTool(),
             BashTool(),
-        ] + TODO(send_msg).tools()
-        for tool in tools:
-            desc: str = (
-                f'def {tool.name}{inspect.signature(tool.invoke)}\n\t"""{tool.desc}"""\n\tpass\n'
-            )
-            ls.append(
-                {
-                    "name": tool.name,
-                    "desc": desc,
-                    "func": tool.invoke,
-                    "inject": getattr(tool, "inject", None),
-                    "pin": tool.pin,
-                }
-            )
-        return ls
+        ] + TODOManager(send_msg).tools()
 
     def __init__(
         self, send_msg: Callable[[str], None], request_msg: Callable[[], str]
@@ -422,20 +422,20 @@ class ToolsList:
 
     def tools_list_desc(self) -> str:
         return (
-            "```python\n" + "\n\n".join([i["desc"] for i in self._tools_list]) + "```"
+            "```python\n"
+            + "\n\n".join([i.signature() for i in self._tools_list])
+            + "```"
         )
 
     def execute_tool(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
         tool_found: bool = False
-        func: Optional[Callable[..., str]] = None
-        pin: bool = False
         output: str = ""
+        pin: bool = False
         for tool in self._tools_list:
-            if name == tool["name"]:
-                func = tool["func"]
-                output = func(**args)
-                pin = tool["pin"]
+            if name == tool.name:
                 tool_found = True
+                output = tool.invoke(**args)
+                pin = tool.pin
                 break
 
         if not tool_found:
@@ -443,8 +443,9 @@ class ToolsList:
 
         additional_output: list[str] = []
         for tool in self._tools_list:
-            if tool["inject"] is not None:
-                additional_output.append(tool["inject"]())
+            inject = tool.inject()
+            if inject is not None:
+                additional_output.append(inject)
 
         output = output + "\n\n" + "\n\n".join(additional_output)
 
