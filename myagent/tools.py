@@ -3,14 +3,14 @@ import json
 import inspect
 import os
 import os.path as osp
-from typing import List
+from typing import Any, Callable, Optional
 import csv
 import io
 
 import frontmatter
 
 
-def _json_returns(obj):
+def _json_returns(obj: Any) -> str:
     return (
         "```json\n"
         + json.dumps(
@@ -22,16 +22,31 @@ def _json_returns(obj):
     )
 
 
+class Tool:
+    name: str
+    desc: str
+    pin: bool
+
+    def invoke(self, *args, **kwargs) -> str:
+        raise NotImplementedError()
+
+    def inject(self) -> Optional[str]:
+        return None
+
+    def signature(self) -> str:
+        return f'def {self.name}{inspect.signature(self.invoke)}\n\t"""{self.desc}"""\n\tpass\n'
+
+
 class PlanItem:
     content: str
     status: str
 
-    def __init__(self, status: str, content: str):
-        self.content = content
-        self.status = status
+    def __init__(self, status: str, content: str) -> None:
+        self.content: str = content
+        self.status: str = status
         self.check()
 
-    def check(self):
+    def check(self) -> None:
         if self.status not in ["pending", "in_progress", "completed"]:
             raise ValueError(
                 f'Invalid status "{self.status}" for TODO item: "{self.content}"'
@@ -39,20 +54,25 @@ class PlanItem:
 
 
 class PlanningState:
-    items: List[PlanItem]
+    items: list[PlanItem]
     rounds_since_update: int
     reminder_rounds: int
 
-    def update(self, todo_csv: str):
-        f = io.StringIO(todo_csv)
-        reader = csv.DictReader(f)
+    def __init__(self) -> None:
+        self.items = []
+        self.rounds_since_update = 1
+        self.reminder_rounds = 5
+
+    def update(self, todo_csv: str) -> None:
+        f: io.StringIO = io.StringIO(todo_csv)
+        reader: csv.DictReader[str] = csv.DictReader(f)
         self.items.clear()
         for row in reader:
             self.items.append(PlanItem(row["status"], row["content"]))
         self.check()
 
-    def check(self):
-        count_in_progress = 0
+    def check(self) -> None:
+        count_in_progress: int = 0
         for i in self.items:
             if i.status == "in_progress":
                 count_in_progress += 1
@@ -62,41 +82,45 @@ class PlanningState:
             )
 
 
-class TODOTool:
-    def __init__(self, planning_state: PlanningState):
-        self.planning_state = planning_state
+class TODOTool(Tool):
+    planning_state: PlanningState
+
+    def __init__(self, planning_state: PlanningState) -> None:
+        self.planning_state: PlanningState = planning_state
 
     def render_for_agent(self) -> str:
-        lines = []
+        lines: list[str] = []
         for i, item in enumerate(self.planning_state.items):
             lines.append(f"- [Plan Item #{i + 1}: {item.status}] {item.content}")
         return "\n".join(lines) + "\n"
 
     def render_for_user(self) -> str:
-        renders = []
+        renders: list[str] = []
         for i in self.planning_state.items:
             if i.status == "pending":
-                s = " "
+                s: str = " "
             elif i.status == "in_progress":
                 s = ">"
             elif i.status == "completed":
                 s = "x"
+            else:
+                s = "?"
             renders.append(f"[{s}] {i.content}")
         return "\n".join(renders)
 
 
 class ReadTODOTool(TODOTool):
-    name = "read_todo"
+    name: str = "read_todo"
 
-    desc = """Reads the current state of the TODO list.
+    desc: str = """Reads the current state of the TODO list.
 
 Use this tool to check the status of tasks, see what has been completed,
 and decide the next steps. This tool does not modify the list.
 """
 
-    pin = False
+    pin: bool = False
 
-    def __init__(self, planning_state: PlanningState):
+    def __init__(self, planning_state: PlanningState) -> None:
         super().__init__(planning_state)
 
     def invoke(self) -> str:
@@ -104,9 +128,9 @@ and decide the next steps. This tool does not modify the list.
 
 
 class WriteTODOTool(TODOTool):
-    name = "write_todo"
+    name: str = "write_todo"
 
-    desc = """You have access to TODO tools to help you manage and plan tasks.
+    desc: str = """You have access to TODO tools to help you manage and plan tasks.
 Use these tools VERY frequently to ensure that you are tracking your tasks 
 and giving the user visibility into your progress.
 
@@ -120,9 +144,12 @@ There should always be one and only one "in_progress" task in the TODO list.
 This action clears all previous items and replaces them with the new parsed items. 
 """
 
-    pin = False
+    pin: bool = False
+    send_msg: Callable[[str], None]
 
-    def __init__(self, planning_state: PlanningState, send_msg):
+    def __init__(
+        self, planning_state: PlanningState, send_msg: Callable[[str], None]
+    ) -> None:
         super().__init__(planning_state)
         self.send_msg = send_msg
 
@@ -137,7 +164,9 @@ This action clears all previous items and replaces them with the new parsed item
             self.planning_state.rounds_since_update
             >= self.planning_state.reminder_rounds
         ):
-            output = f"REMINDER: there are {self.planning_state.rounds_since_update} rounds since last plan update. Update your plan with {self.name} tool ASAP."
+            output: str = (
+                f"REMINDER: there are {self.planning_state.rounds_since_update} rounds since last plan update. Update your plan with {self.name} tool ASAP."
+            )
         else:
             output = ""
 
@@ -145,45 +174,49 @@ This action clears all previous items and replaces them with the new parsed item
         return output
 
 
-class TODO:
-    def __init__(self, send_msg):
+class TODOManager:
+    planning_state: PlanningState
+    send_msg: Callable[[str], None]
+
+    def __init__(self, send_msg: Callable[[str], None]) -> None:
         self.planning_state = PlanningState()
-        self.planning_state.items = []
-        self.planning_state.rounds_since_update = 1
-        self.planning_state.reminder_rounds = 5
         self.send_msg = send_msg
 
-    def tools(self):
+    def tools(self) -> list[TODOTool]:
         return [
             ReadTODOTool(self.planning_state),
             WriteTODOTool(self.planning_state, self.send_msg),
         ]
 
 
-class ReadFileTool:
-    name = "read_file"
-    desc = """Reads and returns a specific chunk of lines from a text file.
+class ReadFileTool(Tool):
+    name: str = "read_file"
+    desc: str = """Reads and returns a specific chunk of lines from a text file.
 
 Supports pagination by specifying 'offset' (starting line number, 0-based) and 'limit' (number of lines to read). 
 Defaults to reading the first 2000 lines. Ideal for inspecting large files, configurations,
 or code without loading the entire content into memory. Handles UTF-8 encoding.
 """
-    pin = False
+    pin: bool = False
 
     def invoke(self, path: str, offset: str = "0", limit: str = "2000") -> str:
-        offset = int(offset)
-        limit = int(limit)
+        offset_int: int = int(offset)
+        limit_int: int = int(limit)
         with open(path, "r", encoding="utf-8") as f:
-            content = f.read()
-            lines = content.split("\n")
-            return "```\n" + "\n".join(lines[offset : offset + limit]) + "\n```\n"
+            content: str = f.read()
+            lines: list[str] = content.split("\n")
+            return (
+                "```\n"
+                + "\n".join(lines[offset_int : offset_int + limit_int])
+                + "\n```\n"
+            )
 
 
-class WriteFileTool:
-    name = "write_file"
-    desc = """Overwrites a file with the provided text content.
+class WriteFileTool(Tool):
+    name: str = "write_file"
+    desc: str = """Overwrites a file with the provided text content.
 WARNING: This will replace the entire file content."""
-    pin = False
+    pin: bool = False
 
     def invoke(self, path: str, content: str) -> str:
         with open(path, "w") as f:
@@ -191,10 +224,10 @@ WARNING: This will replace the entire file content."""
         return _json_returns({"success": True})
 
 
-class EditFileTool:
-    name = "edit_file"
+class EditFileTool(Tool):
+    name: str = "edit_file"
 
-    desc = """Use this tool to replace a specific section of text within a file with new content.
+    desc: str = """Use this tool to replace a specific section of text within a file with new content.
 This is the primary way to modify code or text files.
 
 CRITICAL INSTRUCTIONS:
@@ -206,12 +239,12 @@ No Partial Matches: Do not guess; copy the exact text from the file reading tool
 Path: Provide the relative or absolute path to the target file.
 """
 
-    pin = False
+    pin: bool = False
 
     def invoke(self, path: str, old_str: str, new_str: str) -> str:
         with open(path, "r") as f:
-            content = f.read()
-        num_matches = content.count(old_str)
+            content: str = f.read()
+        num_matches: int = content.count(old_str)
         if num_matches != 1:
             return _json_returns(
                 {
@@ -232,16 +265,16 @@ Path: Provide the relative or absolute path to the target file.
         )
 
 
-class BashTool:
-    name = "bash"
-    desc = """Executes a bash command with timeout from the command line.
+class BashTool(Tool):
+    name: str = "bash"
+    desc: str = """Executes a bash command with timeout from the command line.
 Returns the standard output, standard error, and return code in a JSON block.
 """
-    pin = False
+    pin: bool = False
 
     def invoke(self, cmd: str, timeout: str = "10") -> str:
-        timeout_num = float(timeout)
-        p = subprocess.Popen(
+        timeout_num: float = float(timeout)
+        p: subprocess.Popen[str] = subprocess.Popen(
             cmd,
             shell=True,
             executable="/bin/bash",
@@ -249,6 +282,8 @@ Returns the standard output, standard error, and return code in a JSON block.
             stderr=subprocess.PIPE,
             text=True,
         )
+        stdout: str
+        stderr: str
         stdout, stderr = p.communicate(timeout=timeout_num)
         return _json_returns(
             {
@@ -259,19 +294,23 @@ Returns the standard output, standard error, and return code in a JSON block.
         )
 
 
-class AskUserTool:
-    name = "ask_user"
+class AskUserTool(Tool):
+    name: str = "ask_user"
 
-    desc = """Request additional input or clarification directly from the user.
+    desc: str = """Request additional input or clarification directly from the user.
 
 This tool pauses the current workflow and waits for the user to provide
 instructions, missing information, confirmation, or feedback required to
 continue the task.
 """
 
-    pin = False
+    pin: bool = False
+    send_msg: Callable[[str], None]
+    request_msg: Callable[[], str]
 
-    def __init__(self, send_msg, request_msg):
+    def __init__(
+        self, send_msg: Callable[[str], None], request_msg: Callable[[], str]
+    ) -> None:
         self.send_msg = send_msg
         self.request_msg = request_msg
 
@@ -280,10 +319,10 @@ continue the task.
         return "> " + self.request_msg() + "\n"
 
 
-class NotifyUserTool:
-    name = "notify_user"
+class NotifyUserTool(Tool):
+    name: str = "notify_user"
 
-    desc = """Send an informational message or progress update to the user.
+    desc: str = """Send an informational message or progress update to the user.
 
 This tool is used to communicate important status updates, execution results,
 next steps, warnings, or other non-interactive messages during task execution.
@@ -291,9 +330,10 @@ Unlike `ask_user`, this tool does not wait for a response and simply informs
 the user about the current state of the workflow.
 """
 
-    pin = False
+    pin: bool = False
+    send_msg: Callable[[str], None]
 
-    def __init__(self, send_msg):
+    def __init__(self, send_msg: Callable[[str], None]) -> None:
         self.send_msg = send_msg
 
     def invoke(self, content: str) -> str:
@@ -305,12 +345,12 @@ the user about the current state of the workflow.
         )
 
 
-def _skill_doc_inject_envs(content, skill_dir):
+def _skill_doc_inject_envs(content: str, skill_dir: str) -> str:
     return content.replace("${CLAUDE_SKILL_DIR}", skill_dir)
 
 
-class LoadSkillTool:
-    name = "load_skill"
+class LoadSkillTool(Tool):
+    name: str = "load_skill"
 
     @property
     def desc(self) -> str:
@@ -329,40 +369,43 @@ The list of skills:
 """
 
     def list_of_skills(self) -> str:
-        ls = []
-        folder = osp.expanduser("~/.agents/skills")
-        skills = os.listdir(folder)
+        ls: list[str] = []
+        folder: str = osp.expanduser("~/.agents/skills")
+        skills: list[str] = os.listdir(folder)
         for skill in skills:
-            skill_md_path = osp.join(folder, skill, "SKILL.md")
+            skill_md_path: str = osp.join(folder, skill, "SKILL.md")
             if not osp.isfile(skill_md_path):
                 continue
             with open(skill_md_path, "r") as f:
-                md = frontmatter.load(f)
-            metadata = (
+                md: frontmatter.Post = frontmatter.load(f)
+            metadata: str = (
                 "---\n"
                 + "\n".join([f"{k}: {v}" for k, v in md.metadata.items()])
                 + "\n---\n"
             )
-            skill_path = osp.join(folder, skill)
+            skill_path: str = osp.join(folder, skill)
             ls.append(f"{skill_path}\n{metadata}")
         return "\n\n".join(ls) + "\n"
 
-    pin = True
+    pin: bool = True
 
     def invoke(self, skill_name: str) -> str:
-        folder = osp.expanduser(osp.join("~/.agents/skills", skill_name))
-        skill_md_path = osp.join(folder, "SKILL.md")
+        folder: str = osp.expanduser(osp.join("~/.agents/skills", skill_name))
+        skill_md_path: str = osp.join(folder, "SKILL.md")
         with open(skill_md_path, "r") as f:
-            md = frontmatter.load(f)
-        content = _skill_doc_inject_envs(md.content, folder)
+            md: frontmatter.Post = frontmatter.load(f)
+        content: str = _skill_doc_inject_envs(md.content, folder)
         return content
 
 
 class ToolsList:
+    _tools_list: list[Tool]
+
     @staticmethod
-    def _register_tools(send_msg, request_msg):
-        ls = []
-        tools = [
+    def _register_tools(
+        send_msg: Callable[[str], None], request_msg: Callable[[], str]
+    ) -> list[Tool]:
+        return [
             ReadFileTool(),
             WriteFileTool(),
             EditFileTool(),
@@ -370,45 +413,39 @@ class ToolsList:
             NotifyUserTool(send_msg),
             LoadSkillTool(),
             BashTool(),
-        ] + TODO(send_msg).tools()
-        for tool in tools:
-            desc = f'def {tool.name}{inspect.signature(tool.invoke)}\n\t"""{tool.desc}"""\n\tpass\n'
-            ls.append(
-                {
-                    "name": tool.name,
-                    "desc": desc,
-                    "func": tool.invoke,
-                    "inject": getattr(tool, "inject", None),
-                    "pin": tool.pin,
-                }
-            )
-        return ls
+        ] + TODOManager(send_msg).tools()
 
-    def __init__(self, send_msg, request_msg):
+    def __init__(
+        self, send_msg: Callable[[str], None], request_msg: Callable[[], str]
+    ) -> None:
         self._tools_list = ToolsList._register_tools(send_msg, request_msg)
 
-    def tools_list_desc(self):
+    def tools_list_desc(self) -> str:
         return (
-            "```python\n" + "\n\n".join([i["desc"] for i in self._tools_list]) + "```"
+            "```python\n"
+            + "\n\n".join([i.signature() for i in self._tools_list])
+            + "```"
         )
 
-    def execute_tool(self, name: str, args: dict):
-        tool_found = False
+    def execute_tool(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
+        tool_found: bool = False
+        output: str = ""
+        pin: bool = False
         for tool in self._tools_list:
-            if name == tool["name"]:
-                func = tool["func"]
-                output = func(**args)
-                pin = tool["pin"]
+            if name == tool.name:
                 tool_found = True
+                output = tool.invoke(**args)
+                pin = tool.pin
                 break
 
         if not tool_found:
             raise ValueError(f'Invalid tool name "{name}"')
 
-        additional_output = []
+        additional_output: list[str] = []
         for tool in self._tools_list:
-            if tool["inject"] is not None:
-                additional_output.append(tool["inject"]())
+            inject = tool.inject()
+            if inject is not None:
+                additional_output.append(inject)
 
         output = output + "\n\n" + "\n\n".join(additional_output)
 

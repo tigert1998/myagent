@@ -19,22 +19,24 @@ $IDK k1 $IDV v1 $IDK k2 $IDV v2 $IDK ... $IDK kn $IDV vn $IDE
 2.  **交替排列**：严格遵循 `Key -> Value -> Key -> Value` 的交替顺序。
 
 ## 当前实现
-在当前版本中，分隔符 `$IDK` 被定义为固定字符串：`{sepidk}`，分隔符 `$IDV` 被定义为固定字符串：`{sepidv}`，分隔符 `$IDE` 被定义为固定字符串：`{sepide}`。
+在当前版本中，分隔符 `$IDK` 被定义为固定字符串：`@{MYAGENT:sepidk}`，分隔符 `$IDV` 被定义为固定字符串：`@{MYAGENT:sepidv}`，分隔符 `$IDE` 被定义为固定字符串：`@{MYAGENT:sepide}`。
 
 ## 示例
 以下是一个具体的 Key-Value 集合转换为 IDSep 格式的示例。
 
 **输入数据：**
-```
-"mother": "she"
-"father": "he"
-"me": "boy"
-"gf": "girl"
+```json
+{
+    "mother": "she",
+    "father": "he",
+    "me": "boy",
+    "gf": "girl"
+}
 ```
 
 **IDSep 编码结果：**
 ```text
-{sepidk}mother{sepidv}she{sepidk}father{sepidv}he{sepidk}me{sepidv}boy{sepidk}gf{sepidv}girl{sepide}
+@{MYAGENT:sepidk}mother@{MYAGENT:sepidv}she@{MYAGENT:sepidk}father@{MYAGENT:sepidv}he@{MYAGENT:sepidk}me@{MYAGENT:sepidv}boy@{MYAGENT:sepidk}gf@{MYAGENT:sepidv}girl@{MYAGENT:sepide}
 ```
 
-*(注：请注意示例中开头的 `{sepidk}` 和结尾的 `{sepide}`，它们确保了结构的完整性。)*
+*(注：请注意示例中开头的 `@{MYAGENT:sepidk}` 和结尾的 `@{MYAGENT:sepide}`，它们确保了结构的完整性。)*
