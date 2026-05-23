@@ -50,10 +50,14 @@ class DiscordChannel:
     def send_msg(
         self, channel: discord.TextChannel, user_id: int, content: str
     ) -> None:
-        future: Future[discord.Message] = asyncio.run_coroutine_threadsafe(
-            channel.send(f"<@{user_id}> {content}"), self.client.loop
-        )
-        future.result()
+        content = f"<@{user_id}> {content}"
+        while len(content) > 0:
+            content_to_send = content[:1900]
+            future: Future[discord.Message] = asyncio.run_coroutine_threadsafe(
+                channel.send(content_to_send), self.client.loop
+            )
+            future.result()
+            content = content[1900:]
 
     async def on_message(self, message: discord.Message) -> None:
         if (
