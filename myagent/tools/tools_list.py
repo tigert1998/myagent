@@ -313,10 +313,7 @@ class AskUserTool(Tool):
     name: str = "ask_user"
 
     desc: str = """Request additional input or clarification directly from the user.
-
-This tool pauses the current workflow and waits for the user to provide
-instructions, missing information, confirmation, or feedback required to
-continue the task.
+IMPORTANT: Invoking this tool is the ONLY mechanism available to request information from the user.
 """
 
     send_msg: Callable[[str], None]
