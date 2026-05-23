@@ -15,7 +15,6 @@ class CallSubAgentTool(Tool):
         "The sub-agent operates with its own independent reasoning loop and scratchpad, "
         "making it ideal for breaking down massive queries without cluttering the main agent's context."
     )
-    pin: bool = False
 
     def __init__(
         self,

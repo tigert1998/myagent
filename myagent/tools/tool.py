@@ -1,5 +1,5 @@
 import inspect
-from typing import Optional, Any
+from typing import Optional, Any, get_origin, get_args, is_typeddict
 
 
 class Tool:
@@ -12,21 +12,45 @@ class Tool:
     def inject(self) -> Optional[str]:
         return None
 
-    def schema(self) -> dict[str, Any]:
-        def annotation_to_str(annotation):
-            if annotation == str:
-                return "string"
-            elif annotation == int:
-                return "integer"
-            elif annotation == float:
-                return "number"
-            elif annotation == bool:
-                return "boolean"
-            raise ValueError(f"Invalid function call parameter type {annotation}")
+    @staticmethod
+    def function_call_type_schema(py_type: Any) -> dict:
+        if py_type is str:
+            return {"type": "string"}
+        elif py_type is int:
+            return {"type": "integer"}
+        elif py_type is float:
+            return {"type": "number"}
+        elif py_type is bool:
+            return {"type": "boolean"}
 
+        origin = get_origin(py_type)
+        args = get_args(py_type)
+
+        if origin is list:
+            if args:
+                return {
+                    "type": "array",
+                    "items": Tool.function_call_type_schema(args[0]),
+                }
+            return {"type": "array"}
+
+        if is_typeddict(py_type):
+            properties = {
+                field_name: Tool.function_call_type_schema(field_type)
+                for field_name, field_type in py_type.__annotations__.items()
+            }
+            return {
+                "type": "object",
+                "properties": properties,
+                "required": list(py_type.__annotations__.keys()),
+            }
+
+        raise ValueError(f"Invalid function call parameter type {py_type}")
+
+    def schema(self) -> dict[str, Any]:
         sig = inspect.signature(self.invoke)
         properties = {
-            param.name: {"type": annotation_to_str(param.annotation)}
+            param.name: Tool.function_call_type_schema(param.annotation)
             for param in sig.parameters.values()
         }
         required = [

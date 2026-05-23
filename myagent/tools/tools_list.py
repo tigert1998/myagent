@@ -2,9 +2,7 @@ import subprocess
 import json
 import os
 import os.path as osp
-from typing import Any, Callable
-import csv
-import io
+from typing import Any, Callable, TypedDict
 
 import frontmatter
 
@@ -71,6 +69,11 @@ class PlanItem:
             )
 
 
+class TODOItemType(TypedDict):
+    status: str
+    content: str
+
+
 class PlanningState:
     items: list[PlanItem]
     rounds_since_update: int
@@ -81,13 +84,15 @@ class PlanningState:
         self.rounds_since_update = 1
         self.reminder_rounds = 5
 
-    def update(self, todo_csv: str) -> None:
-        f: io.StringIO = io.StringIO(todo_csv)
-        reader: csv.DictReader[str] = csv.DictReader(f)
-        self.items.clear()
-        for row in reader:
-            self.items.append(PlanItem(row["status"], row["content"]))
-        self.check()
+    def update(self, todo_items: list[TODOItemType]) -> None:
+        self.items = [
+            PlanItem(status=i["status"], content=i["content"]) for i in todo_items
+        ]
+        try:
+            self.check()
+        except Exception as e:
+            self.items = []
+            raise e
 
     def check(self) -> None:
         if len(self.items) == 0:
@@ -170,8 +175,8 @@ This action clears all previous items and replaces them with the new parsed item
         super().__init__(planning_state)
         self.send_msg = send_msg
 
-    def invoke(self, todo_csv: str) -> str:
-        self.planning_state.update(todo_csv)
+    def invoke(self, todo_items: list[TODOItemType]) -> str:
+        self.planning_state.update(todo_items)
         self.planning_state.rounds_since_update = 0
         self.send_msg(self.render_for_user())
         return _json_returns({"success": True})

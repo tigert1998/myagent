@@ -15,9 +15,6 @@ class FullToolsList(ToolsList):
         name_builder: Callable[[], str],
         llm_client,
         logger_builder: Callable[[str], "Logger"],
-        num_retries: int = 3,
-        summarize_num: int = 128,
-        summarize_keep_latest_num: int = 8,
     ):
         base_tools_list = BaseToolsList(send_msg, request_msg)
         call_sub_agent_tool = CallSubAgentTool(
