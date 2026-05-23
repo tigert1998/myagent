@@ -39,14 +39,17 @@ class TerminalPrompter:
             TerminalPrompter._instance = TerminalPrompter()
         return TerminalPrompter._instance
 
-    def prompt(self, prompt: str, text: Optional[str]) -> Optional[str]:
+    def _prompt(self, prompt: str) -> None:
         time_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(
             f"[{time_str}] {colorama.Fore.RED}{prompt}:{colorama.Fore.RESET} ",
             end="",
         )
-        if text is None:
-            return input()
-        else:
-            print(text)
-            return None
+
+    def prompt_input(self, prompt: str) -> str:
+        self._prompt(prompt)
+        return input()
+
+    def prompt_notify(self, prompt: str, content: str) -> None:
+        self._prompt(prompt)
+        print(content)

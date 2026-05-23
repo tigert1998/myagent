@@ -12,11 +12,11 @@ from myagent.idsep_parser import IDSepParser
 
 
 def send_msg(content: str) -> None:
-    TerminalPrompter.instance().prompt("MyAgent updates", content)
+    TerminalPrompter.instance().prompt_notify("MyAgent updates", content)
 
 
 def request_msg() -> str:
-    return TerminalPrompter.instance().prompt("User replies", None) or ""
+    return TerminalPrompter.instance().prompt_input("User replies")
 
 
 if __name__ == "__main__":
@@ -42,5 +42,5 @@ if __name__ == "__main__":
         num_retries=3,
     )
 
-    query: str = TerminalPrompter.instance().prompt("User queries", None) or ""
+    query: str = TerminalPrompter.instance().prompt_input("User queries")
     answer: str = agent.run(query)
