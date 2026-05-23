@@ -8,7 +8,7 @@ import io
 
 import frontmatter
 
-from myagent.tools.tool import Tool
+from myagent.tools.call_sub_agent_tool import CallSubAgentTool, Tool
 
 
 def _json_returns(obj: Any) -> str:

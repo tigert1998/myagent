@@ -31,7 +31,7 @@ class ReActAgent(Agent):
         tools_list: ToolsList,
         idsep_parser: IDSepParser,
         logger: Logger,
-        num_retries: int,
+        num_retries: int = 3,
         summarize_num: int = 128,
         summarize_keep_latest_num: int = 8,
     ) -> None:
