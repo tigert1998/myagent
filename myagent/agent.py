@@ -35,7 +35,9 @@ class ReActAgent(Agent):
     def _one_iter(
         self, messages: list[dict[str, Any]]
     ) -> tuple[list[dict[str, Any]], str | None]:
-        reasoning_content, content, tool_calls = self.llm_client.call(messages)
+        reasoning_content, content, tool_calls = self.llm_client.call(
+            messages, self.tools_list.schema()
+        )
         self.logger.log(self.name, {"thought": reasoning_content})
 
         messages_to_append = [

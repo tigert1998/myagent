@@ -4,7 +4,7 @@ import requests
 
 class LLMClient:
     def call(
-        self, messages: list[dict[str, Any]]
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> tuple[str, str, list[dict[str, Any]]]:
         """Returns (reasoning_content, content)."""
         raise NotImplementedError()
@@ -32,13 +32,13 @@ class DeepSeekClient(LLMClient):
         self.other_configs: dict[str, Any] = other_configs
 
     def call(
-        self, messages: list[dict[str, Any]]
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> tuple[str, str, list[dict[str, Any]]]:
-        messages = [{"role": m["role"], "content": m["content"]} for m in messages]
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "stream": False,
+            "tools": tools,
             **self.other_configs,
         }
         headers: dict[str, str] = {
