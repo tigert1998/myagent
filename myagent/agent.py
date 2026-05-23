@@ -97,10 +97,8 @@ class ReActAgent(Agent):
         if "action" not in obj:
             raise ValueError(f"Invalid content format: {obj}")
 
-        tool: str = ""
-        args: dict[str, Any] = {}
-        for tool, args in obj["action"].items():
-            break
+        tool: str = obj["action"]["tool"]
+        args: dict[str, str] = obj["action"].get("args", {})
 
         self.logger.log(self.name, {"thought": obj.get("thought", "")})
         self.logger.log(self.name, {"action": {"tool": tool, "args": args}})

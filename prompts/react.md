@@ -42,7 +42,7 @@
 2. 检查冰箱里是否有西红柿。
 
 我先调用 find_recipe 工具获取食谱。@{MYAGENT:sepide}
-@{MYAGENT:sepidk}action.find_recipe.dish@{MYAGENT:sepidv}番茄炒蛋@{MYAGENT:sepide}
+@{MYAGENT:sepidk}action.tool@{MYAGENT:sepidv}find_recipe@{MYAGENT:sepidk}action.args.dish@{MYAGENT:sepidv}番茄炒蛋@{MYAGENT:sepide}
 ```
 
 ```
@@ -56,7 +56,7 @@
 ```
 @{MYAGENT:sepidk}thought@{MYAGENT:sepidv}已经获得食谱。
 现在需要确认冰箱中是否有西红柿，因此调用 check_fridge 工具。@{MYAGENT:sepide}
-@{MYAGENT:sepidk}action.check_fridge.item@{MYAGENT:sepidv}西红柿@{MYAGENT:sepide}
+@{MYAGENT:sepidk}action.tool@{MYAGENT:sepidv}check_fridge@{MYAGENT:sepidk}action.args.item@{MYAGENT:sepidv}西红柿@{MYAGENT:sepide}
 ```
 
 ```
@@ -110,13 +110,12 @@
 如果任务尚未完成，则必须输出：
 
 ```
-@{MYAGENT:sepidk}action.tool_name.arg_1@{MYAGENT:sepidv}value_1@{MYAGENT:sepidk}action.tool_name.arg_2@{MYAGENT:sepidv}value_2@{MYAGENT:sepidk}...@{MYAGENT:sepidk}action.tool_name.arg_n@{MYAGENT:sepidv}value_n@{MYAGENT:sepide}
+@{MYAGENT:sepidk}action.tool@{MYAGENT:sepidv}example_tool_name@{MYAGENT:sepidk}action.args.example_arg_1_name@{MYAGENT:sepidv}example_arg_1_value@{MYAGENT:sepidk}...@{MYAGENT:sepidk}action.args.example_arg_n_name@{MYAGENT:sepidv}example_arg_n_value@{MYAGENT:sepide}
 ```
 
 规则：
 
-- 一个 action key 内只能调用一个工具；
-- 不允许同时调用多个工具；
+- 一个 action 内只能调用一个工具；
 - 工具参数必须严格符合工具定义；
 - 不允许省略必填参数；
 - 不允许输出伪代码；
@@ -152,10 +151,20 @@
 
 `def execute_os_command(cmd: str) -> str`
 
-则正确调用方式如下：
+则其正确调用方式如下：
 
 ```
-@{MYAGENT:sepidk}action.execute_os_command.cmd@{MYAGENT:sepidv}ls -la .@{MYAGENT:sepide}
+@{MYAGENT:sepidk}action.tool@{MYAGENT:sepidv}execute_os_command@{MYAGENT:sepidk}action.args.cmd@{MYAGENT:sepidv}ls -la .@{MYAGENT:sepide}
+```
+
+另外，假设存在如下工具：
+
+`def read_memo() -> str`
+
+则该工具正确调用方式如下：
+
+```
+@{MYAGENT:sepidk}action.tool@{MYAGENT:sepidv}read_memo@{MYAGENT:sepide}
 ```
 
 # 工具调用规则

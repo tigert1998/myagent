@@ -165,13 +165,9 @@ This action clears all previous items and replaces them with the new parsed item
             >= self.planning_state.reminder_rounds
         ):
             if len(self.planning_state.items) == 0:
-                output: str = (
-                    f"REMINDER: You have not created a todo list yet. Create one with `{self.name}` tool if your task is complicated or involves multiple steps."
-                )
+                output = f"REMINDER: You have not created a todo list yet. Create one with `{self.name}` tool if your task is complicated or involves multiple steps."
             else:
-                output: str = (
-                    f"REMINDER: There are {self.planning_state.rounds_since_update} rounds since last plan update. Update your plan with `{self.name}` tool ASAP."
-                )
+                output = f"REMINDER: There are {self.planning_state.rounds_since_update} rounds since last plan update. Update your plan with `{self.name}` tool ASAP."
         else:
             output = ""
 
