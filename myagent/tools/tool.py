@@ -1,5 +1,5 @@
 import inspect
-from typing import Optional, Any, get_origin, get_args, is_typeddict
+from typing import Optional, Any, get_origin, get_args, is_typeddict, Literal
 
 
 class Tool:
@@ -14,14 +14,9 @@ class Tool:
 
     @staticmethod
     def function_call_type_schema(py_type: Any) -> dict:
-        if py_type is str:
-            return {"type": "string"}
-        elif py_type is int:
-            return {"type": "integer"}
-        elif py_type is float:
-            return {"type": "number"}
-        elif py_type is bool:
-            return {"type": "boolean"}
+        mapping = {str: "string", int: "integer", float: "number", bool: "boolean"}
+        if py_type in mapping.keys():
+            return {"type": mapping[py_type]}
 
         origin = get_origin(py_type)
         args = get_args(py_type)
@@ -33,6 +28,9 @@ class Tool:
                     "items": Tool.function_call_type_schema(args[0]),
                 }
             return {"type": "array"}
+
+        if origin is Literal:
+            return {"type": mapping[type(args[0])], "enum": list(args)}
 
         if is_typeddict(py_type):
             properties = {

@@ -2,7 +2,7 @@ import subprocess
 import json
 import os
 import os.path as osp
-from typing import Any, Callable, TypedDict
+from typing import Any, Callable, TypedDict, Literal
 
 import frontmatter
 
@@ -70,7 +70,7 @@ class PlanItem:
 
 
 class TODOItemType(TypedDict):
-    status: str
+    status: Literal["pending", "in_progress", "completed"]
     content: str
 
 
@@ -128,8 +128,6 @@ class TODOTool(Tool):
                 s = ">"
             elif i.status == "completed":
                 s = "x"
-            else:
-                s = "?"
             renders.append(f"[{s}] {i.content}")
         return "\n".join(renders)
 
@@ -161,8 +159,6 @@ These tools are also EXTREMELY helpful for planning tasks, and for breaking
 down larger complex tasks into smaller steps. If you do not use this tool 
 when planning, you may forget to do important tasks - and that is unacceptable.
 
-The input MUST be a valid CSV formatted string containing exactly two columns: 'status' and 'content'. 
-Example format: 'status,content\\ncompleted,Task A\\npending,Task B\\nin_progress,Task C'.
 There should always be one and only one "in_progress" task in the TODO list. 
 This action clears all previous items and replaces them with the new parsed items. 
 """
