@@ -23,35 +23,23 @@ class CallSubAgentTool(Tool):
         llm_client: "LLMClient",
         base_tools_list: "BaseToolsList",
         logger_builder: Callable[[str], "Logger"],
-        num_retries: int,
-        summarize_num: int,
-        summarize_keep_latest_num: int,
     ) -> None:
         self.name_builder = name_builder
         self.llm_client = llm_client
         self.base_tools_list = base_tools_list
         self.logger_builder = logger_builder
-        self.num_retries = num_retries
-        self.summarize_num = summarize_num
-        self.summarize_keep_latest_num = summarize_keep_latest_num
 
     def invoke(self, query: str) -> str:
         from myagent.agent import ReActAgent
-        from myagent.idsep_parser import IDSepParser
 
         name = self.name_builder()
-        idsep_parser = IDSepParser()
         logger = self.logger_builder(name)
 
         sub_agent = ReActAgent(
             name=name,
             llm_client=self.llm_client,
             tools_list=self.base_tools_list,
-            idsep_parser=idsep_parser,
             logger=logger,
-            num_retries=self.num_retries,
-            summarize_num=self.summarize_num,
-            summarize_keep_latest_num=self.summarize_keep_latest_num,
         )
 
         return sub_agent.run(query)

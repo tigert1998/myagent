@@ -8,7 +8,6 @@ from myagent.llm_client import LLMClient
 from myagent.tools.full_tools_list import FullToolsList
 from myagent.agent import ReActAgent
 from myagent.loggers import JsonlLogger, TerminalPrompter
-from myagent.idsep_parser import IDSepParser
 
 
 def send_msg(content: str) -> None:
@@ -47,13 +46,10 @@ if __name__ == "__main__":
         lambda name: logger,
     )
 
-    idsep_parser: IDSepParser = IDSepParser()
-
     agent: ReActAgent = ReActAgent(
         "ReActAgent",
         llm_client,
         full_tools_list,
-        idsep_parser,
         logger,
     )
 

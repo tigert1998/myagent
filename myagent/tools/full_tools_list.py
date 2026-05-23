@@ -25,8 +25,5 @@ class FullToolsList(ToolsList):
             llm_client,
             base_tools_list,
             logger_builder,
-            num_retries,
-            summarize_num,
-            summarize_keep_latest_num,
         )
         super().__init__(base_tools_list.tools + [call_sub_agent_tool])

@@ -14,7 +14,6 @@ from myagent.agent import ReActAgent
 from myagent.llm_client import LLMClient
 from myagent.loggers import JsonlLogger
 from myagent.tools.full_tools_list import FullToolsList
-from myagent.idsep_parser import IDSepParser
 
 
 class DiscordChannel:
@@ -101,12 +100,10 @@ class DiscordChannel:
                     lambda name: logger,
                 )
 
-                idsep_parser: IDSepParser = IDSepParser()
                 agent: ReActAgent = ReActAgent(
                     "ReActAgent",
                     self.llm_client,
                     full_tools_list,
-                    idsep_parser,
                     logger,
                 )
                 agent.run(message.clean_content)

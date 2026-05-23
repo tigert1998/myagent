@@ -8,7 +8,7 @@ import io
 
 import frontmatter
 
-from myagent.tools.call_sub_agent_tool import CallSubAgentTool, Tool
+from myagent.tools.call_sub_agent_tool import Tool
 
 
 def _json_returns(obj: Any) -> str:
@@ -29,18 +29,16 @@ class ToolsList:
     def __init__(self, tools: list[Tool]):
         self.tools = tools
 
-    def desc(self) -> str:
-        return "```python\n" + "\n\n".join([i.signature() for i in self.tools]) + "```"
+    def schema(self) -> list[dict[str, Any]]:
+        return [t.schema() for t in self.tools]
 
-    def execute_tool(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
+    def execute_tool(self, name: str, args: dict[str, Any]) -> str:
         tool_found: bool = False
         output: str = ""
-        pin: bool = False
         for tool in self.tools:
             if name == tool.name:
                 tool_found = True
                 output = tool.invoke(**args)
-                pin = tool.pin
                 break
 
         if not tool_found:
@@ -54,7 +52,7 @@ class ToolsList:
 
         output = output + "\n\n" + "\n\n".join(additional_output)
 
-        return output, pin
+        return output
 
 
 class PlanItem:
@@ -140,8 +138,6 @@ Use this tool to check the status of tasks, see what has been completed,
 and decide the next steps. This tool does not modify the list.
 """
 
-    pin: bool = False
-
     def __init__(self, planning_state: PlanningState) -> None:
         super().__init__(planning_state)
 
@@ -166,7 +162,6 @@ There should always be one and only one "in_progress" task in the TODO list.
 This action clears all previous items and replaces them with the new parsed items. 
 """
 
-    pin: bool = False
     send_msg: Callable[[str], None]
 
     def __init__(
@@ -216,9 +211,8 @@ Supports pagination by specifying 'offset' (starting line number, 1-based) and '
 Defaults to reading the first 2000 lines. Ideal for inspecting large files, configurations,
 or code without loading the entire content into memory. Handles UTF-8 encoding.
 """
-    pin: bool = False
 
-    def invoke(self, path: str, offset: str = "1", limit: str = "2000") -> str:
+    def invoke(self, path: str, offset: int = 1, limit: int = 2000) -> str:
         l: int = int(offset) - 1
         r: int = l + int(limit)
         with open(path, "r", encoding="utf-8") as f:
@@ -242,7 +236,6 @@ class WriteFileTool(Tool):
     name: str = "write_file"
     desc: str = """Overwrites a file with the provided text content. Handles UTF-8 encoding.
 WARNING: This will replace the entire file content."""
-    pin: bool = False
 
     def invoke(self, path: str, content: str) -> str:
         with open(path, "w", encoding="utf-8") as f:
@@ -264,8 +257,6 @@ If the string appears multiple times, include more context (e.g., surrounding li
 No Partial Matches: Do not guess; copy the exact text from the file reading tools.
 Path: Provide the relative or absolute path to the target file.
 """
-
-    pin: bool = False
 
     def invoke(self, path: str, old_str: str, new_str: str) -> str:
         with open(path, "r", encoding="utf-8") as f:
@@ -296,10 +287,8 @@ class BashTool(Tool):
     desc: str = """Executes a bash command with timeout from the command line.
 Returns the standard output, standard error, and return code in a JSON block.
 """
-    pin: bool = False
 
-    def invoke(self, cmd: str, timeout: str = "10") -> str:
-        timeout_num: float = float(timeout)
+    def invoke(self, cmd: str, timeout: float = 10) -> str:
         p: subprocess.Popen[str] = subprocess.Popen(
             cmd,
             shell=True,
@@ -310,7 +299,7 @@ Returns the standard output, standard error, and return code in a JSON block.
         )
         stdout: str
         stderr: str
-        stdout, stderr = p.communicate(timeout=timeout_num)
+        stdout, stderr = p.communicate(timeout=timeout)
         return _json_returns(
             {
                 "stdout": stdout,
@@ -330,7 +319,6 @@ instructions, missing information, confirmation, or feedback required to
 continue the task.
 """
 
-    pin: bool = False
     send_msg: Callable[[str], None]
     request_msg: Callable[[], str]
 
@@ -356,7 +344,6 @@ Unlike `ask_user`, this tool does not wait for a response and simply informs
 the user about the current state of the workflow.
 """
 
-    pin: bool = False
     send_msg: Callable[[str], None]
 
     def __init__(self, send_msg: Callable[[str], None]) -> None:
@@ -412,8 +399,6 @@ The list of skills:
             skill_path: str = osp.join(folder, skill)
             ls.append(f"{skill_path}\n{metadata}")
         return "\n\n".join(ls) + "\n"
-
-    pin: bool = True
 
     def invoke(self, skill_name: str) -> str:
         folder: str = osp.expanduser(osp.join("~/.agents/skills", skill_name))

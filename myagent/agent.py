@@ -5,7 +5,6 @@ from typing import Any
 from myagent.loggers import Logger
 from myagent.tools.tools_list import ToolsList
 from myagent.llm_client import LLMClient
-from myagent.idsep_parser import IDSepParser
 from myagent.prompt import load_prompt
 
 
@@ -15,12 +14,10 @@ class Agent:
         name: str,
         llm_client: LLMClient,
         tools_list: ToolsList,
-        idsep_parser: IDSepParser,
     ) -> None:
         self.name: str = name
         self.llm_client: LLMClient = llm_client
         self.tools_list: ToolsList = tools_list
-        self.idsep_parser: IDSepParser = idsep_parser
 
 
 class ReActAgent(Agent):
@@ -29,157 +26,68 @@ class ReActAgent(Agent):
         name: str,
         llm_client: LLMClient,
         tools_list: ToolsList,
-        idsep_parser: IDSepParser,
         logger: Logger,
-        num_retries: int = 3,
-        summarize_num: int = 128,
-        summarize_keep_latest_num: int = 8,
     ) -> None:
-        super().__init__(name, llm_client, tools_list, idsep_parser)
+        super().__init__(name, llm_client, tools_list)
 
         self.logger: Logger = logger
-        self.num_retries: int = num_retries
-        self.summarize_num: int = summarize_num
-        self.summarize_keep_latest_num: int = summarize_keep_latest_num
 
-    def _parse_idsep(self, content: str) -> dict[str, Any]:
-        obj: dict[str, str] = self.idsep_parser.parse(content)
-
-        ans: dict[str, Any] = {}
-
-        for k, v in obj.items():
-            k_parts: list[str] = k.split(".")
-            node: dict[str, Any] = ans
-            for k_part in k_parts[:-1]:
-                if node.get(k_part) is None:
-                    node[k_part] = {}
-                node = node[k_part]
-            node[k_parts[-1]] = v
-
-        return ans
-
-    def _summarize(self, history: list[dict[str, Any]]) -> str:
-        history_objs: list[dict[str, Any]] = []
-        for m in history[1:]:
-            obj: dict[str, Any] = self._parse_idsep(m["content"])
-            history_objs.append({"role": m["role"], "content": obj})
-
-        summarizer_prompt = load_prompt(
-            "prompts/summarizer.md",
-            {
-                "history": json.dumps(history_objs, indent=4, ensure_ascii=False),
-            },
-        )
-
-        messages: list[dict[str, str]] = [
-            {
-                "role": "user",
-                "content": summarizer_prompt,
-            },
-        ]
-
-        _, content = self.llm_client.call(messages)
-        self.logger.log(self.name, {"summarization": content})
-        return content
-
-    def _try_one_iter(
+    def _one_iter(
         self, messages: list[dict[str, Any]]
-    ) -> tuple[list[dict[str, Any]] | None, str | None]:
-        _, content = self.llm_client.call(messages)
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        reasoning_content, content, tool_calls = self.llm_client.call(messages)
+        self.logger.log(self.name, {"thought": reasoning_content})
 
-        obj: dict[str, Any] = self._parse_idsep(content)
-
-        if "final_answer" in obj:
-            self.logger.log(self.name, {"thought": obj.get("thought", "")})
-            self.logger.log(self.name, {"final_answer": obj["final_answer"]})
-            return None, obj["final_answer"]
-
-        if "action" not in obj:
-            raise ValueError(f"Invalid content format: {obj}")
-
-        tool: str = obj["action"]["tool"]
-        args: dict[str, str] = obj["action"].get("args", {})
-
-        self.logger.log(self.name, {"thought": obj.get("thought", "")})
-        self.logger.log(self.name, {"action": {"tool": tool, "args": args}})
-        try:
-            observation, pin = self.tools_list.execute_tool(tool, args)
-        except:
-            observation = traceback.format_exc()
-            pin = False
-        observation_obj: dict[str, str] = {"observation": observation}
-        self.logger.log(self.name, observation_obj)
-        messages = messages + [
+        messages_to_append = [
             {
                 "role": "assistant",
+                "reasoning_content": reasoning_content,
                 "content": content,
-                "meta": {"pin": pin},
-            },
-            {
-                "role": "user",
-                "content": self.idsep_parser.build(observation_obj),
-                "meta": {"pin": pin},
-            },
+                "tool_calls": tool_calls,
+            }
         ]
 
-        if len(messages) >= self.summarize_num:
-            summarization_content: str = self._summarize(messages)
-            summarization_obj: dict[str, str] = {"summarization": summarization_content}
-            messages = [
-                m
-                for i, m in enumerate(messages)
-                if m["meta"]["pin"]
-                or (len(messages) - i <= self.summarize_keep_latest_num)
-            ] + [
-                {
-                    "role": "assistant",
-                    "content": self.idsep_parser.build(summarization_obj),
-                    "meta": {"pin": False},
-                }
-            ]
+        if len(tool_calls) > 0:
+            for tool_call in tool_calls:
+                call_id = tool_call["id"]
+                name = tool_call["function"]["name"]
+                args: dict[str, Any] = json.loads(tool_call["function"]["arguments"])
+                self.logger.log(self.name, {"action": {"tool": name, "args": args}})
+                try:
+                    observation = self.tools_list.execute_tool(name, args)
+                except:
+                    observation = traceback.format_exc()
+                self.logger.log(self.name, {"observation": observation})
 
-        return messages, None
+                messages_to_append.append(
+                    {"role": "tool", "tool_call_id": call_id, "content": observation}
+                )
 
-    def _retry_one_iter(
-        self, messages: list[dict[str, Any]]
-    ) -> tuple[list[dict[str, Any]] | None, str | None]:
-        for _ in range(self.num_retries + 1):
-            try:
-                return self._try_one_iter(messages)
-            except Exception as e:
-                exception: Exception = e
-        raise exception
+            messages = messages + messages_to_append
+            return messages, None
+        else:
+            self.logger.log(self.name, {"final_answer": content})
+
+            messages = messages + messages_to_append
+            return messages, content
 
     def run(self, query: str) -> str:
-        react_prompt = load_prompt(
-            "prompts/react.md",
-            {
-                "tools_list": self.tools_list.desc(),
-                "sepidk": self.idsep_parser.sepidk,
-                "sepidv": self.idsep_parser.sepidv,
-                "sepide": self.idsep_parser.sepide,
-            },
-        )
+        react_prompt = load_prompt("prompts/react.md", {})
 
-        question_obj: dict[str, str] = {"question": query}
         messages: list[dict[str, Any]] = [
             {
                 "role": "system",
                 "content": react_prompt,
-                "meta": {"pin": True},
             },
             {
                 "role": "user",
-                "content": self.idsep_parser.build(question_obj),
-                "meta": {"pin": True},
+                "content": query,
             },
         ]
-        self.logger.log(self.name, question_obj)
+        self.logger.log(self.name, {"question": query})
 
         while True:
-            result_messages, final_answer = self._retry_one_iter(messages)
+            messages, final_answer = self._one_iter(messages)
             if final_answer is not None:
                 self.tools_list.execute_tool("notify_user", {"content": final_answer})
                 return final_answer
-            if result_messages is not None:
-                messages = result_messages
