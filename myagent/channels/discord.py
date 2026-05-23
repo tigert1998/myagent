@@ -13,8 +13,7 @@ import discord
 from myagent.agent import ReActAgent
 from myagent.llm_client import LLMClient
 from myagent.loggers import JsonlLogger
-from myagent.tools import ToolsList
-from myagent.idsep_parser import IDSepParser
+from myagent.tools.full_tools_list import FullToolsList
 
 
 class DiscordChannel:
@@ -82,18 +81,30 @@ class DiscordChannel:
                 channel=channel, user_id=message.author.id
             )
             try:
+                num_sub_agents = 0
+
+                def sub_agent_name_builder():
+                    nonlocal num_sub_agents
+                    num_sub_agents += 1
+                    return f"SubAgent #{num_sub_agents}"
+
                 logger: JsonlLogger = JsonlLogger(
                     osp.join(self.log_path, f"{message.author.id}-{time():.3f}.jsonl")
                 )
-                tools_list: ToolsList = ToolsList(send_msg, request_msg)
-                idsep_parser: IDSepParser = IDSepParser()
+
+                full_tools_list = FullToolsList(
+                    send_msg,
+                    request_msg,
+                    sub_agent_name_builder,
+                    self.llm_client,
+                    lambda name: logger,
+                )
+
                 agent: ReActAgent = ReActAgent(
                     "ReActAgent",
                     self.llm_client,
-                    tools_list,
-                    idsep_parser,
+                    full_tools_list,
                     logger,
-                    num_retries=3,
                 )
                 agent.run(message.clean_content)
             except:

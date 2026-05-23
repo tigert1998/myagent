@@ -1,13 +1,14 @@
 import subprocess
 import json
-import inspect
 import os
 import os.path as osp
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 import csv
 import io
 
 import frontmatter
+
+from myagent.tools.call_sub_agent_tool import Tool
 
 
 def _json_returns(obj: Any) -> str:
@@ -22,19 +23,36 @@ def _json_returns(obj: Any) -> str:
     )
 
 
-class Tool:
-    name: str
-    desc: str
-    pin: bool
+class ToolsList:
+    tools: list[Tool]
 
-    def invoke(self, *args, **kwargs) -> str:
-        raise NotImplementedError()
+    def __init__(self, tools: list[Tool]):
+        self.tools = tools
 
-    def inject(self) -> Optional[str]:
-        return None
+    def schema(self) -> list[dict[str, Any]]:
+        return [t.schema() for t in self.tools]
 
-    def signature(self) -> str:
-        return f'def {self.name}{inspect.signature(self.invoke)}\n\t"""{self.desc}"""\n\tpass\n'
+    def execute_tool(self, name: str, args: dict[str, Any]) -> str:
+        tool_found: bool = False
+        output: str = ""
+        for tool in self.tools:
+            if name == tool.name:
+                tool_found = True
+                output = tool.invoke(**args)
+                break
+
+        if not tool_found:
+            raise ValueError(f'Invalid tool name "{name}"')
+
+        additional_output: list[str] = []
+        for tool in self.tools:
+            inject = tool.inject()
+            if inject is not None:
+                additional_output.append(inject)
+
+        output = output + "\n\n" + "\n\n".join(additional_output)
+
+        return output
 
 
 class PlanItem:
@@ -72,6 +90,8 @@ class PlanningState:
         self.check()
 
     def check(self) -> None:
+        if len(self.items) == 0:
+            return
         count_in_progress: int = 0
         for i in self.items:
             if i.status == "in_progress":
@@ -118,8 +138,6 @@ Use this tool to check the status of tasks, see what has been completed,
 and decide the next steps. This tool does not modify the list.
 """
 
-    pin: bool = False
-
     def __init__(self, planning_state: PlanningState) -> None:
         super().__init__(planning_state)
 
@@ -144,7 +162,6 @@ There should always be one and only one "in_progress" task in the TODO list.
 This action clears all previous items and replaces them with the new parsed items. 
 """
 
-    pin: bool = False
     send_msg: Callable[[str], None]
 
     def __init__(
@@ -175,19 +192,15 @@ This action clears all previous items and replaces them with the new parsed item
         return output
 
 
-class TODOManager:
-    planning_state: PlanningState
-    send_msg: Callable[[str], None]
-
+class TODOToolsList(ToolsList):
     def __init__(self, send_msg: Callable[[str], None]) -> None:
-        self.planning_state = PlanningState()
-        self.send_msg = send_msg
-
-    def tools(self) -> list[TODOTool]:
-        return [
-            ReadTODOTool(self.planning_state),
-            WriteTODOTool(self.planning_state, self.send_msg),
-        ]
+        planning_state = PlanningState()
+        super().__init__(
+            [
+                ReadTODOTool(planning_state),
+                WriteTODOTool(planning_state, send_msg),
+            ]
+        )
 
 
 class ReadFileTool(Tool):
@@ -198,9 +211,8 @@ Supports pagination by specifying 'offset' (starting line number, 1-based) and '
 Defaults to reading the first 2000 lines. Ideal for inspecting large files, configurations,
 or code without loading the entire content into memory. Handles UTF-8 encoding.
 """
-    pin: bool = False
 
-    def invoke(self, path: str, offset: str = "1", limit: str = "2000") -> str:
+    def invoke(self, path: str, offset: int = 1, limit: int = 2000) -> str:
         l: int = int(offset) - 1
         r: int = l + int(limit)
         with open(path, "r", encoding="utf-8") as f:
@@ -224,7 +236,6 @@ class WriteFileTool(Tool):
     name: str = "write_file"
     desc: str = """Overwrites a file with the provided text content. Handles UTF-8 encoding.
 WARNING: This will replace the entire file content."""
-    pin: bool = False
 
     def invoke(self, path: str, content: str) -> str:
         with open(path, "w", encoding="utf-8") as f:
@@ -246,8 +257,6 @@ If the string appears multiple times, include more context (e.g., surrounding li
 No Partial Matches: Do not guess; copy the exact text from the file reading tools.
 Path: Provide the relative or absolute path to the target file.
 """
-
-    pin: bool = False
 
     def invoke(self, path: str, old_str: str, new_str: str) -> str:
         with open(path, "r", encoding="utf-8") as f:
@@ -278,10 +287,8 @@ class BashTool(Tool):
     desc: str = """Executes a bash command with timeout from the command line.
 Returns the standard output, standard error, and return code in a JSON block.
 """
-    pin: bool = False
 
-    def invoke(self, cmd: str, timeout: str = "10") -> str:
-        timeout_num: float = float(timeout)
+    def invoke(self, cmd: str, timeout: float = 10) -> str:
         p: subprocess.Popen[str] = subprocess.Popen(
             cmd,
             shell=True,
@@ -292,7 +299,7 @@ Returns the standard output, standard error, and return code in a JSON block.
         )
         stdout: str
         stderr: str
-        stdout, stderr = p.communicate(timeout=timeout_num)
+        stdout, stderr = p.communicate(timeout=timeout)
         return _json_returns(
             {
                 "stdout": stdout,
@@ -306,13 +313,9 @@ class AskUserTool(Tool):
     name: str = "ask_user"
 
     desc: str = """Request additional input or clarification directly from the user.
-
-This tool pauses the current workflow and waits for the user to provide
-instructions, missing information, confirmation, or feedback required to
-continue the task.
+IMPORTANT: Invoking this tool is the ONLY mechanism available to request information from the user.
 """
 
-    pin: bool = False
     send_msg: Callable[[str], None]
     request_msg: Callable[[], str]
 
@@ -338,7 +341,6 @@ Unlike `ask_user`, this tool does not wait for a response and simply informs
 the user about the current state of the workflow.
 """
 
-    pin: bool = False
     send_msg: Callable[[str], None]
 
     def __init__(self, send_msg: Callable[[str], None]) -> None:
@@ -395,8 +397,6 @@ The list of skills:
             ls.append(f"{skill_path}\n{metadata}")
         return "\n\n".join(ls) + "\n"
 
-    pin: bool = True
-
     def invoke(self, skill_name: str) -> str:
         folder: str = osp.expanduser(osp.join("~/.agents/skills", skill_name))
         skill_md_path: str = osp.join(folder, "SKILL.md")
@@ -406,55 +406,19 @@ The list of skills:
         return content
 
 
-class ToolsList:
-    _tools_list: list[Tool]
-
-    @staticmethod
-    def _register_tools(
-        send_msg: Callable[[str], None], request_msg: Callable[[], str]
-    ) -> list[Tool]:
-        return [
-            ReadFileTool(),
-            WriteFileTool(),
-            EditFileTool(),
-            AskUserTool(send_msg, request_msg),
-            NotifyUserTool(send_msg),
-            LoadSkillTool(),
-            BashTool(),
-        ] + TODOManager(send_msg).tools()
-
+class BaseToolsList(ToolsList):
     def __init__(
         self, send_msg: Callable[[str], None], request_msg: Callable[[], str]
     ) -> None:
-        self._tools_list = ToolsList._register_tools(send_msg, request_msg)
-
-    def tools_list_desc(self) -> str:
-        return (
-            "```python\n"
-            + "\n\n".join([i.signature() for i in self._tools_list])
-            + "```"
+        super().__init__(
+            [
+                ReadFileTool(),
+                WriteFileTool(),
+                EditFileTool(),
+                AskUserTool(send_msg, request_msg),
+                NotifyUserTool(send_msg),
+                LoadSkillTool(),
+                BashTool(),
+            ]
+            + TODOToolsList(send_msg).tools
         )
-
-    def execute_tool(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
-        tool_found: bool = False
-        output: str = ""
-        pin: bool = False
-        for tool in self._tools_list:
-            if name == tool.name:
-                tool_found = True
-                output = tool.invoke(**args)
-                pin = tool.pin
-                break
-
-        if not tool_found:
-            raise ValueError(f'Invalid tool name "{name}"')
-
-        additional_output: list[str] = []
-        for tool in self._tools_list:
-            inject = tool.inject()
-            if inject is not None:
-                additional_output.append(inject)
-
-        output = output + "\n\n" + "\n\n".join(additional_output)
-
-        return output, pin
