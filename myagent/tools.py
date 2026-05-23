@@ -210,17 +210,28 @@ or code without loading the entire content into memory. Handles UTF-8 encoding.
         with open(path, "r", encoding="utf-8") as f:
             content: str = f.read()
             lines: list[str] = content.split("\n")
-            return "```\n" + "\n".join(lines[l:r]) + "\n```\n"
+            lines = lines[l:r]
+            num_digits = len(str(r))
+            return (
+                f"File: {path}\n```\n"
+                + "\n".join(
+                    [
+                        f"{repr(i + l + 1).rjust(num_digits)} | {line}"
+                        for i, line in enumerate(lines)
+                    ]
+                )
+                + "\n```\n"
+            )
 
 
 class WriteFileTool(Tool):
     name: str = "write_file"
-    desc: str = """Overwrites a file with the provided text content.
+    desc: str = """Overwrites a file with the provided text content. Handles UTF-8 encoding.
 WARNING: This will replace the entire file content."""
     pin: bool = False
 
     def invoke(self, path: str, content: str) -> str:
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(content)
         return _json_returns({"success": True})
 
@@ -229,7 +240,7 @@ class EditFileTool(Tool):
     name: str = "edit_file"
 
     desc: str = """Use this tool to replace a specific section of text within a file with new content.
-This is the primary way to modify code or text files.
+Handles UTF-8 encoding. This is the primary way to modify code or text files.
 
 CRITICAL INSTRUCTIONS:
 Exact Match: The old_str must be an exact, character-for-character match of a unique block in the file.
@@ -243,7 +254,7 @@ Path: Provide the relative or absolute path to the target file.
     pin: bool = False
 
     def invoke(self, path: str, old_str: str, new_str: str) -> str:
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             content: str = f.read()
         num_matches: int = content.count(old_str)
         if num_matches != 1:
