@@ -1,13 +1,14 @@
 import subprocess
 import json
-import inspect
 import os
 import os.path as osp
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 import csv
 import io
 
 import frontmatter
+
+from myagent.tools.tool import Tool
 
 
 def _json_returns(obj: Any) -> str:
@@ -22,19 +23,38 @@ def _json_returns(obj: Any) -> str:
     )
 
 
-class Tool:
-    name: str
-    desc: str
-    pin: bool
+class ToolsList:
+    tools: list[Tool]
 
-    def invoke(self, *args, **kwargs) -> str:
-        raise NotImplementedError()
+    def __init__(self, tools: list[Tool]):
+        self.tools = tools
 
-    def inject(self) -> Optional[str]:
-        return None
+    def desc(self) -> str:
+        return "```python\n" + "\n\n".join([i.signature() for i in self.tools]) + "```"
 
-    def signature(self) -> str:
-        return f'def {self.name}{inspect.signature(self.invoke)}\n\t"""{self.desc}"""\n\tpass\n'
+    def execute_tool(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
+        tool_found: bool = False
+        output: str = ""
+        pin: bool = False
+        for tool in self.tools:
+            if name == tool.name:
+                tool_found = True
+                output = tool.invoke(**args)
+                pin = tool.pin
+                break
+
+        if not tool_found:
+            raise ValueError(f'Invalid tool name "{name}"')
+
+        additional_output: list[str] = []
+        for tool in self.tools:
+            inject = tool.inject()
+            if inject is not None:
+                additional_output.append(inject)
+
+        output = output + "\n\n" + "\n\n".join(additional_output)
+
+        return output, pin
 
 
 class PlanItem:
@@ -72,6 +92,8 @@ class PlanningState:
         self.check()
 
     def check(self) -> None:
+        if len(self.items) == 0:
+            return
         count_in_progress: int = 0
         for i in self.items:
             if i.status == "in_progress":
@@ -175,19 +197,15 @@ This action clears all previous items and replaces them with the new parsed item
         return output
 
 
-class TODOManager:
-    planning_state: PlanningState
-    send_msg: Callable[[str], None]
-
+class TODOToolsList(ToolsList):
     def __init__(self, send_msg: Callable[[str], None]) -> None:
-        self.planning_state = PlanningState()
-        self.send_msg = send_msg
-
-    def tools(self) -> list[TODOTool]:
-        return [
-            ReadTODOTool(self.planning_state),
-            WriteTODOTool(self.planning_state, self.send_msg),
-        ]
+        planning_state = PlanningState()
+        super().__init__(
+            [
+                ReadTODOTool(planning_state),
+                WriteTODOTool(planning_state, send_msg),
+            ]
+        )
 
 
 class ReadFileTool(Tool):
@@ -406,55 +424,19 @@ The list of skills:
         return content
 
 
-class ToolsList:
-    _tools_list: list[Tool]
-
-    @staticmethod
-    def _register_tools(
-        send_msg: Callable[[str], None], request_msg: Callable[[], str]
-    ) -> list[Tool]:
-        return [
-            ReadFileTool(),
-            WriteFileTool(),
-            EditFileTool(),
-            AskUserTool(send_msg, request_msg),
-            NotifyUserTool(send_msg),
-            LoadSkillTool(),
-            BashTool(),
-        ] + TODOManager(send_msg).tools()
-
+class BaseToolsList(ToolsList):
     def __init__(
         self, send_msg: Callable[[str], None], request_msg: Callable[[], str]
     ) -> None:
-        self._tools_list = ToolsList._register_tools(send_msg, request_msg)
-
-    def tools_list_desc(self) -> str:
-        return (
-            "```python\n"
-            + "\n\n".join([i.signature() for i in self._tools_list])
-            + "```"
+        super().__init__(
+            [
+                ReadFileTool(),
+                WriteFileTool(),
+                EditFileTool(),
+                AskUserTool(send_msg, request_msg),
+                NotifyUserTool(send_msg),
+                LoadSkillTool(),
+                BashTool(),
+            ]
+            + TODOToolsList(send_msg).tools
         )
-
-    def execute_tool(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
-        tool_found: bool = False
-        output: str = ""
-        pin: bool = False
-        for tool in self._tools_list:
-            if name == tool.name:
-                tool_found = True
-                output = tool.invoke(**args)
-                pin = tool.pin
-                break
-
-        if not tool_found:
-            raise ValueError(f'Invalid tool name "{name}"')
-
-        additional_output: list[str] = []
-        for tool in self._tools_list:
-            inject = tool.inject()
-            if inject is not None:
-                additional_output.append(inject)
-
-        output = output + "\n\n" + "\n\n".join(additional_output)
-
-        return output, pin

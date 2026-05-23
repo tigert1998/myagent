@@ -13,7 +13,7 @@ import discord
 from myagent.agent import ReActAgent
 from myagent.llm_client import LLMClient
 from myagent.loggers import JsonlLogger
-from myagent.tools import ToolsList
+from myagent.tools.tools_list import BaseToolsList, ToolsList
 from myagent.idsep_parser import IDSepParser
 
 
@@ -85,7 +85,7 @@ class DiscordChannel:
                 logger: JsonlLogger = JsonlLogger(
                     osp.join(self.log_path, f"{message.author.id}-{time():.3f}.jsonl")
                 )
-                tools_list: ToolsList = ToolsList(send_msg, request_msg)
+                tools_list: ToolsList = BaseToolsList(send_msg, request_msg)
                 idsep_parser: IDSepParser = IDSepParser()
                 agent: ReActAgent = ReActAgent(
                     "ReActAgent",

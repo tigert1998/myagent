@@ -3,7 +3,7 @@ import traceback
 from typing import Any
 
 from myagent.loggers import Logger
-from myagent.tools import ToolsList
+from myagent.tools.tools_list import ToolsList
 from myagent.llm_client import LLMClient
 from myagent.idsep_parser import IDSepParser
 from myagent.prompt import load_prompt
@@ -154,7 +154,7 @@ class ReActAgent(Agent):
         react_prompt = load_prompt(
             "prompts/react.md",
             {
-                "tools_list": self.tools_list.tools_list_desc(),
+                "tools_list": self.tools_list.desc(),
                 "sepidk": self.idsep_parser.sepidk,
                 "sepidv": self.idsep_parser.sepidv,
                 "sepide": self.idsep_parser.sepide,

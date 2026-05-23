@@ -5,7 +5,7 @@ from time import time
 from typing import Any
 
 from myagent.llm_client import LLMClient
-from myagent.tools import ToolsList
+from myagent.tools.tools_list import ToolsList, BaseToolsList
 from myagent.agent import ReActAgent
 from myagent.loggers import JsonlLogger, TerminalPrompter
 from myagent.idsep_parser import IDSepParser
@@ -27,12 +27,15 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config: dict[str, Any] = json.load(f)
     llm_client: LLMClient = LLMClient.build(config["llm"])
-    tools_list: ToolsList = ToolsList(send_msg, request_msg)
-    idsep_parser: IDSepParser = IDSepParser()
+
+    tools_list: ToolsList = BaseToolsList(send_msg, request_msg)
 
     logger: JsonlLogger = JsonlLogger(
         osp.join(config["channels"]["console"]["log"], f"{time():.3f}.jsonl")
     )
+
+    idsep_parser: IDSepParser = IDSepParser()
+
     agent: ReActAgent = ReActAgent(
         "ReActAgent",
         llm_client,
