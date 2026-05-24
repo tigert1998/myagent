@@ -9,7 +9,7 @@ class Tool:
 
     class Parameters(BaseModel): ...
 
-    def invoke(self, *args, **kwargs) -> str:
+    def invoke(self, *args, **kwargs) -> tuple[str, bool]:
         raise NotImplementedError()
 
     def inject(self) -> Optional[str]:

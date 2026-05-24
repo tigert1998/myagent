@@ -33,7 +33,7 @@ class CallSubAgentTool(Tool):
         self.base_tools_list = base_tools_list
         self.logger_builder = logger_builder
 
-    def invoke(self, query: str) -> str:
+    def invoke(self, query: str) -> tuple[str, bool]:
         from myagent.agent import ReActAgent
 
         name = self.name_builder()
@@ -46,4 +46,4 @@ class CallSubAgentTool(Tool):
             logger=logger,
         )
 
-        return sub_agent.run(query)
+        return sub_agent.run(query), False

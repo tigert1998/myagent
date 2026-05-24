@@ -39,6 +39,7 @@ class DeepSeekClient(LLMClient):
             "messages": messages,
             "stream": False,
             "tools": tools,
+            "tool_choice": "required",
             **self.other_configs,
         }
         headers: dict[str, str] = {
