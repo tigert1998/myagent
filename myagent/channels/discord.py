@@ -77,19 +77,20 @@ class DiscordChannel:
         if not isinstance(channel, discord.TextChannel):
             return
 
-        if (
-            message.reference is not None
-            and message.reference.message_id is not None
-            and message.reference.message_id in self.messages_to_session
-        ):
+        if message.reference is not None and message.reference.message_id is not None:
             # reply
-            self.messages_to_session[message.reference.message_id].append_user_new_msg(
-                message.clean_content
-            )
+            if message.reference.message_id in self.messages_to_session:
+                self.messages_to_session[
+                    message.reference.message_id
+                ].append_user_new_msg(message.clean_content)
+                self.messages_to_session[message.id] = self.messages_to_session[
+                    message.reference.message_id
+                ]
             return
 
         def run_agent_in_thread() -> None:
             session = DiscordChannel.Session()
+            self.messages_to_session[message.id] = session
 
             def send_msg(content: str):
                 message_ids = self.send_msg(
