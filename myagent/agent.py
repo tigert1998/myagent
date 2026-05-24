@@ -53,9 +53,14 @@ class ReActAgent(Agent):
             for tool_call in tool_calls:
                 call_id = tool_call["id"]
                 name = tool_call["function"]["name"]
-                args: dict[str, Any] = json.loads(tool_call["function"]["arguments"])
-                self.logger.log(self.name, {"action": {"tool": name, "args": args}})
                 try:
+                    args = self.tools_list.parse_args(
+                        name, tool_call["function"]["arguments"]
+                    ).model_dump()
+                    self.logger.log(
+                        self.name,
+                        {"action": {"tool": name, "args": args}},
+                    )
                     observation = self.tools_list.execute_tool(name, args)
                 except:
                     observation = traceback.format_exc()

@@ -2,9 +2,10 @@ import subprocess
 import json
 import os
 import os.path as osp
-from typing import Any, Callable, TypedDict, Literal
+from typing import Any, Callable, Literal, Optional
 
 import frontmatter
+from pydantic import BaseModel
 
 from myagent.tools.call_sub_agent_tool import Tool
 
@@ -30,6 +31,13 @@ class ToolsList:
     def schema(self) -> list[dict[str, Any]]:
         return [t.schema() for t in self.tools]
 
+    def parse_args(self, name: str, args: str):
+        for tool in self.tools:
+            if name == tool.name:
+                return tool.Parameters.model_validate_json(args)
+
+        raise ValueError(f'Invalid tool name "{name}"')
+
     def execute_tool(self, name: str, args: dict[str, Any]) -> str:
         tool_found: bool = False
         output: str = ""
@@ -54,8 +62,8 @@ class ToolsList:
 
 
 class PlanItem:
-    content: str
     status: str
+    content: str
 
     def __init__(self, status: str, content: str) -> None:
         self.content: str = content
@@ -69,11 +77,6 @@ class PlanItem:
             )
 
 
-class TODOItemType(TypedDict):
-    status: Literal["pending", "in_progress", "completed"]
-    content: str
-
-
 class PlanningState:
     items: list[PlanItem]
     rounds_since_update: int
@@ -84,7 +87,7 @@ class PlanningState:
         self.rounds_since_update = 1
         self.reminder_rounds = 5
 
-    def update(self, todo_items: list[TODOItemType]) -> None:
+    def update(self, todo_items: list[dict[str, str]]) -> None:
         self.items = [
             PlanItem(status=i["status"], content=i["content"]) for i in todo_items
         ]
@@ -135,11 +138,13 @@ class TODOTool(Tool):
 class ReadTODOTool(TODOTool):
     name: str = "read_todo"
 
-    desc: str = """Reads the current state of the TODO list.
+    desc: str = (
+        "Reads the current state of the TODO list. "
+        "Use this tool to check the status of tasks, see what has been completed, "
+        "and decide the next steps. This tool does not modify the list."
+    )
 
-Use this tool to check the status of tasks, see what has been completed,
-and decide the next steps. This tool does not modify the list.
-"""
+    class Parameters(BaseModel): ...
 
     def __init__(self, planning_state: PlanningState) -> None:
         super().__init__(planning_state)
@@ -151,19 +156,23 @@ and decide the next steps. This tool does not modify the list.
 class WriteTODOTool(TODOTool):
     name: str = "write_todo"
 
-    desc: str = """You have access to TODO tools to help you manage and plan tasks.
-Use these tools VERY frequently to ensure that you are tracking your tasks 
-and giving the user visibility into your progress.
+    desc: str = (
+        "You have access to TODO tools to help you manage and plan tasks. "
+        "Use these tools VERY frequently to ensure that you are tracking your "
+        "and giving the user visibility into your progress. "
+        "These tools are also EXTREMELY helpful for planning tasks, and for breaking "
+        "down larger complex tasks into smaller steps. If you do not use this tool "
+        "when planning, you may forget to do important tasks - and that is unacceptable. "
+        'There should always be one and only one "in_progress" task in the TODO list. '
+        "This action clears all previous items and replaces them with the new parsed items. "
+    )
 
-These tools are also EXTREMELY helpful for planning tasks, and for breaking 
-down larger complex tasks into smaller steps. If you do not use this tool 
-when planning, you may forget to do important tasks - and that is unacceptable.
+    class Parameters(BaseModel):
+        class Item(BaseModel):
+            status: Literal["pending", "in_progress", "completed"]
+            content: str
 
-There should always be one and only one "in_progress" task in the TODO list. 
-This action clears all previous items and replaces them with the new parsed items. 
-"""
-
-    send_msg: Callable[[str], None]
+        todo_items: list[Item]
 
     def __init__(
         self, planning_state: PlanningState, send_msg: Callable[[str], None]
@@ -171,7 +180,7 @@ This action clears all previous items and replaces them with the new parsed item
         super().__init__(planning_state)
         self.send_msg = send_msg
 
-    def invoke(self, todo_items: list[TODOItemType]) -> str:
+    def invoke(self, todo_items: list[dict[str, str]]) -> str:
         self.planning_state.update(todo_items)
         self.planning_state.rounds_since_update = 0
         self.send_msg(self.render_for_user())
@@ -206,14 +215,19 @@ class TODOToolsList(ToolsList):
 
 class ReadFileTool(Tool):
     name: str = "read_file"
-    desc: str = """Reads and returns a specific chunk of lines from a text file.
+    desc: str = (
+        "Reads and returns a specific chunk of lines from a text file. "
+        "Supports pagination by specifying 'offset' (starting line number, 1-based) and 'limit' (number of lines to read). "
+        "Defaults to reading the first 2000 lines. Ideal for inspecting large files, configurations, "
+        "or code without loading the entire content into memory. Handles UTF-8 encoding. "
+    )
 
-Supports pagination by specifying 'offset' (starting line number, 1-based) and 'limit' (number of lines to read). 
-Defaults to reading the first 2000 lines. Ideal for inspecting large files, configurations,
-or code without loading the entire content into memory. Handles UTF-8 encoding.
-"""
+    class Parameters(BaseModel):
+        path: str
+        offset: Optional[int] = 1
+        limit: Optional[int] = 2000
 
-    def invoke(self, path: str, offset: int = 1, limit: int = 2000) -> str:
+    def invoke(self, path: str, offset: int, limit: int) -> str:
         l: int = int(offset) - 1
         r: int = l + int(limit)
         with open(path, "r", encoding="utf-8") as f:
@@ -235,8 +249,14 @@ or code without loading the entire content into memory. Handles UTF-8 encoding.
 
 class WriteFileTool(Tool):
     name: str = "write_file"
-    desc: str = """Overwrites a file with the provided text content. Handles UTF-8 encoding.
-WARNING: This will replace the entire file content."""
+    desc: str = (
+        "Overwrites a file with the provided text content. Handles UTF-8 encoding. "
+        "WARNING: This will replace the entire file content."
+    )
+
+    class Parameters(BaseModel):
+        path: str
+        content: str
 
     def invoke(self, path: str, content: str) -> str:
         with open(path, "w", encoding="utf-8") as f:
@@ -247,17 +267,22 @@ WARNING: This will replace the entire file content."""
 class EditFileTool(Tool):
     name: str = "edit_file"
 
-    desc: str = """Use this tool to replace a specific section of text within a file with new content.
-Handles UTF-8 encoding. This is the primary way to modify code or text files.
+    desc: str = (
+        "Use this tool to replace a specific section of text within a file with new content. "
+        "Handles UTF-8 encoding. This is the primary way to modify code or text files. "
+        "CRITICAL INSTRUCTIONS: "
+        "Exact Match: The old_str must be an exact, character-for-character match of a unique block in the file. "
+        "Include surrounding whitespace or indentation if necessary to ensure uniqueness. "
+        "Uniqueness: Ensure the old_str appears only ONCE in the file to avoid accidental mass replacements. "
+        "If the string appears multiple times, include more context (e.g., surrounding lines) in old_str. "
+        "No Partial Matches: Do not guess; copy the exact text from the file reading tools. "
+        "Path: Provide the relative or absolute path to the target file."
+    )
 
-CRITICAL INSTRUCTIONS:
-Exact Match: The old_str must be an exact, character-for-character match of a unique block in the file.
-Include surrounding whitespace or indentation if necessary to ensure uniqueness.
-Uniqueness: Ensure the old_str appears only ONCE in the file to avoid accidental mass replacements.
-If the string appears multiple times, include more context (e.g., surrounding lines) in old_str.
-No Partial Matches: Do not guess; copy the exact text from the file reading tools.
-Path: Provide the relative or absolute path to the target file.
-"""
+    class Parameters(BaseModel):
+        path: str
+        old_str: str
+        new_str: str
 
     def invoke(self, path: str, old_str: str, new_str: str) -> str:
         with open(path, "r", encoding="utf-8") as f:
@@ -285,11 +310,16 @@ Path: Provide the relative or absolute path to the target file.
 
 class BashTool(Tool):
     name: str = "bash"
-    desc: str = """Executes a bash command with timeout from the command line.
-Returns the standard output, standard error, and return code in a JSON block.
-"""
+    desc: str = (
+        "Executes a bash command with timeout from the command line. "
+        "Returns the standard output, standard error, and return code in a JSON block."
+    )
 
-    def invoke(self, cmd: str, timeout: float = 10) -> str:
+    class Parameters(BaseModel):
+        cmd: str
+        timeout: float = 10
+
+    def invoke(self, cmd: str, timeout: float) -> str:
         p: subprocess.Popen[str] = subprocess.Popen(
             cmd,
             shell=True,
@@ -313,9 +343,13 @@ Returns the standard output, standard error, and return code in a JSON block.
 class AskUserTool(Tool):
     name: str = "ask_user"
 
-    desc: str = """Request additional input or clarification directly from the user.
-IMPORTANT: Invoking this tool is the ONLY mechanism available to request information from the user.
-"""
+    desc: str = (
+        "Request additional input or clarification directly from the user. "
+        "IMPORTANT: Invoking this tool is the ONLY mechanism available to request information from the user."
+    )
+
+    class Parameters(BaseModel):
+        question: str
 
     send_msg: Callable[[str], None]
     request_msg: Callable[[], str]
@@ -334,15 +368,18 @@ IMPORTANT: Invoking this tool is the ONLY mechanism available to request informa
 class NotifyUserTool(Tool):
     name: str = "notify_user"
 
-    desc: str = """Send an informational message or progress update to the user.
-
-This tool is used to communicate important status updates, execution results,
-next steps, warnings, or other non-interactive messages during task execution.
-Unlike `ask_user`, this tool does not wait for a response and simply informs
-the user about the current state of the workflow.
-"""
+    desc: str = (
+        "Send an informational message or progress update to the user. "
+        "This tool is used to communicate important status updates, execution results, "
+        "next steps, warnings, or other non-interactive messages during task execution. "
+        "Unlike `ask_user`, this tool does not wait for a response and simply informs "
+        "the user about the current state of the workflow."
+    )
 
     send_msg: Callable[[str], None]
+
+    class Parameters(BaseModel):
+        content: str
 
     def __init__(self, send_msg: Callable[[str], None]) -> None:
         self.send_msg = send_msg
@@ -365,19 +402,20 @@ class LoadSkillTool(Tool):
 
     def __init__(self) -> None:
         super().__init__()
-        self.desc = f"""Load the `SKILL.md` of a specific skill by name.
+        self.desc = (
+            "Load the `SKILL.md` of a specific skill by name. "
+            "A skill is a reusable capability package that typically includes a `SKILL.md` file "
+            "describing what the skill does, when it should be used, and any related instructions or requirements. "
+            "It contains detailed workflows, examples, domain knowledge, "
+            "or execution guidance that help the agent perform specific tasks. "
+            "You can retrieve and reference the full contents of the skill’s `SKILL.md` file "
+            "for execution or further guidance. "
+            "The list of skills: "
+            f"{self.list_of_skills()}"
+        )
 
-A skill is a reusable capability package that typically includes a `SKILL.md` file
-describing what the skill does, when it should be used, and any related instructions or requirements.
-It contains detailed workflows, examples, domain knowledge,
-or execution guidance that help the agent perform specific tasks.
-You can retrieve and reference the full contents of the skill’s `SKILL.md` file
-for execution or further guidance.
-
-The list of skills:
-
-{self.list_of_skills()}
-"""
+    class Parameters(BaseModel):
+        skill_name: str
 
     def list_of_skills(self) -> str:
         ls: list[str] = []

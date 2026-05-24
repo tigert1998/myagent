@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING, Callable
 
+from pydantic import BaseModel, Field
+
 from myagent.tools.tool import Tool
 
 if TYPE_CHECKING:
@@ -15,6 +17,9 @@ class CallSubAgentTool(Tool):
         "The sub-agent operates with its own independent reasoning loop and scratchpad, "
         "making it ideal for breaking down massive queries without cluttering the main agent's context."
     )
+
+    class Parameters(BaseModel):
+        query: str = Field(description="")
 
     def __init__(
         self,
