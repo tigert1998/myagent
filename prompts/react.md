@@ -23,7 +23,7 @@
 4. 获取工具返回结果（observation）
 5. 基于 observation 继续思考
 6. 重复上述流程，直到任务完成
-7. 通过 @{MYAGENT:notify_user_tool_name} 工具调用输出最终结果（final_answer）
+7. 通过 @{MYAGENT:attempt_completion_tool_name} 工具调用输出最终结果（final_answer）
 
 # 标准执行示例
 
@@ -54,12 +54,12 @@ find_recipe(dish="番茄炒蛋")
 
 思考：
 ```
-两个版本都符合“简单”的描述，但不确定用户更偏好哪一种，也没有说明是否需要避开某些配料（比如葱花、糖），因此需要调用 ask_user 工具向用户澄清偏好。
+两个版本都符合“简单”的描述，但不确定用户更偏好哪一种，也没有说明是否需要避开某些配料（比如葱花、糖），因此需要调用 @{MYAGENT:ask_followup_question_tool_name} 工具向用户澄清偏好。
 ```
 
 行动：
 ```python
-ask_user(question="为你找到了两个简单的番茄炒蛋食谱版本：极简版（仅用盐，10分钟完成）和家常简单版（加少许糖提鲜，可选葱花，12分钟完成），请问你更偏好哪一个？是否有需要避开的配料？")
+@{MYAGENT:ask_followup_question_tool_name}(question="为你找到了两个简单的番茄炒蛋食谱版本：极简版（仅用盐，10分钟完成）和家常简单版（加少许糖提鲜，可选葱花，12分钟完成），请问你更偏好哪一个？是否有需要避开的配料？")
 ```
 
 观察：
@@ -93,12 +93,12 @@ check_fridge(item="西红柿")
 
 行动：
 ```python
-notify_user(content="""你指定的极简版番茄炒蛋食谱如下：
+@{MYAGENT:attempt_completion_tool_name}(content="""你指定的极简版番茄炒蛋食谱如下：
 2个鸡蛋打散，2个番茄切块。
 热油后先炒鸡蛋盛出，再炒番茄至软烂，加入鸡蛋放盐调味即可，全程约10分钟，无额外配料。
 
 冰箱里有3个西红柿，足够制作。
-""", finish=True)
+""")
 ```
 
 # 原则

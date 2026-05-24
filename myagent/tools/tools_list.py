@@ -347,17 +347,15 @@ class BashTool(Tool):
         )
 
 
-class AskUserTool(Tool):
-    name: str = "ask_user"
+class AskFollowupQuestionTool(Tool):
+    name: str = "ask_followup_question"
 
     desc: str = (
         "Request additional input or clarification directly from the user. "
         "CRITICAL: This tool is the ONLY mechanism to ask the user for information. "
-        "Failure to use this tool when user input is needed will result in a failed request "
-        "and an unexpected early session termination.\n\n"
         "Example:\n"
         "User: Schedule a meeting with John.\n"
-        'Assistant: ask_user(question="I\'d be happy to help! Could you please specify the date and time for the meeting?")'
+        'Assistant: ask_followup_question(question="I\'d be happy to help! Could you please specify the date and time for the meeting?")'
     )
 
     class Parameters(BaseModel):
@@ -377,33 +375,24 @@ class AskUserTool(Tool):
         return ToolResult("> " + self.request_msg() + "\n")
 
 
-class NotifyUserTool(Tool):
-    name: str = "notify_user"
+class AttemptCompletionTool(Tool):
+    name: str = "attempt_completion"
 
-    desc: str = (
-        "Sends an informational message or progress update to the user. "
-        "This tool enhances workflow transparency by communicating task status, "
-        "execution results, upcoming steps, or warnings. Unlike `ask_user`, "
-        "this is a one-way communication tool and does not wait for user input."
-    )
+    desc: str = "Use this tool to present the result of your work to the user."
 
     send_msg: Callable[[str], None]
 
     class Parameters(BaseModel):
         content: str = Field(
-            description="The descriptive text message to be conveyed to the user."
-        )
-        finish: bool = Field(
-            default=False,
-            description="A completion flag. Set to True if and only if the entire task is finished.",
+            description="Final result message to deliver to the user once the task is complete."
         )
 
     def __init__(self, send_msg: Callable[[str], None]) -> None:
         self.send_msg = send_msg
 
-    def invoke(self, content: str, finish: bool) -> ToolResult:
+    def invoke(self, content: str) -> ToolResult:
         self.send_msg(content)
-        return ToolResult(_json_returns({"success": True}), content if finish else None)
+        return ToolResult(_json_returns({"success": True}), content)
 
 
 def _skill_doc_inject_envs(content: str, skill_dir: str) -> str:
@@ -467,8 +456,8 @@ class BaseToolsList(ToolsList):
                 ReadFileTool(),
                 WriteFileTool(),
                 EditFileTool(),
-                AskUserTool(send_msg, request_msg),
-                NotifyUserTool(send_msg),
+                AskFollowupQuestionTool(send_msg, request_msg),
+                AttemptCompletionTool(send_msg),
                 LoadSkillTool(),
                 BashTool(),
             ]

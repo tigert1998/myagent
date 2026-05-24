@@ -2,7 +2,11 @@ import traceback
 from typing import Any, Optional
 
 from myagent.loggers import Logger
-from myagent.tools.tools_list import ToolsList, NotifyUserTool
+from myagent.tools.tools_list import (
+    ToolsList,
+    AttemptCompletionTool,
+    AskFollowupQuestionTool,
+)
 from myagent.llm_client import LLMClient
 from myagent.prompt import load_prompt
 
@@ -75,7 +79,11 @@ class ReActAgent(Agent):
 
     def run(self, query: str) -> str:
         react_prompt = load_prompt(
-            "prompts/react.md", {"notify_user_tool_name": NotifyUserTool.name}
+            "prompts/react.md",
+            {
+                "attempt_completion_tool_name": AttemptCompletionTool.name,
+                "ask_followup_question_tool_name": AskFollowupQuestionTool.name,
+            },
         )
 
         messages: list[dict[str, Any]] = [
