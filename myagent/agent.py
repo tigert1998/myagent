@@ -47,7 +47,8 @@ class ReActAgent(Agent):
             {
                 "role": "assistant",
                 "reasoning_content": reasoning_content,
-                "tool_calls": tool_calls,
+                "content": content,
+                **({"tool_calls": tool_calls} if len(tool_calls) > 0 else {}),
             }
         ]
 
