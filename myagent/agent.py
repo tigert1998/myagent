@@ -1,6 +1,5 @@
-import json
 import traceback
-from typing import Any
+from typing import Any, Optional
 
 from myagent.loggers import Logger
 from myagent.tools.tools_list import ToolsList
@@ -34,7 +33,7 @@ class ReActAgent(Agent):
 
     def _one_iter(
         self, messages: list[dict[str, Any]]
-    ) -> tuple[list[dict[str, Any]], bool]:
+    ) -> tuple[list[dict[str, Any]], Optional[str]]:
         reasoning_content, _, tool_calls = self.llm_client.call(
             messages, self.tools_list.schema()
         )
@@ -59,17 +58,19 @@ class ReActAgent(Agent):
                     self.name,
                     {"action": {"tool": name, "args": args}},
                 )
-                observation, finish = self.tools_list.execute_tool(name, args)
+                result = self.tools_list.execute_tool(name, args)
+                observation = result.content
+                final_answer = result.final_answer
             except:
                 observation = traceback.format_exc()
-                finish = False
+                final_answer = None
             self.logger.log(self.name, {"observation": observation})
             messages_to_append.append(
                 {"role": "tool", "tool_call_id": call_id, "content": observation}
             )
 
         messages = messages + messages_to_append
-        return messages, finish
+        return messages, final_answer
 
     def run(self, query: str) -> str:
         react_prompt = load_prompt("prompts/react.md", {})
@@ -89,5 +90,4 @@ class ReActAgent(Agent):
         while True:
             messages, final_answer = self._one_iter(messages)
             if final_answer is not None:
-                self.tools_list.execute_tool("notify_user", {"content": final_answer})
                 return final_answer
