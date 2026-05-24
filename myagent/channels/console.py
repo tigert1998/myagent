@@ -17,7 +17,7 @@ def send_msg(content: str) -> None:
 def request_msg() -> str:
     try:
         return TerminalPrompter.instance().prompt_input("User")
-    except EOFError, KeyboardInterrupt:
+    except (EOFError, KeyboardInterrupt) as _:
         print()
         exit(0)
 
@@ -52,11 +52,12 @@ if __name__ == "__main__":
     agent: ReActAgent = ReActAgent(
         "ReActAgent",
         llm_client,
+        send_msg,
         full_tools_list,
         logger,
     )
 
+    messages = None
     while True:
         agent.append_user_new_msg(request_msg())
-        messages, answer = agent.run()
-        send_msg(answer)
+        messages, _ = agent.run(messages)

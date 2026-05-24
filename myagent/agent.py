@@ -1,5 +1,5 @@
 import traceback
-from typing import Any, Optional
+from typing import Any, Optional, Callable
 import threading
 
 from myagent.loggers import Logger
@@ -13,10 +13,12 @@ class Agent:
         self,
         name: str,
         llm_client: LLMClient,
+        send_msg: Callable[[str], None],
         tools_list: ToolsList,
     ) -> None:
         self.name: str = name
         self.llm_client: LLMClient = llm_client
+        self.send_msg = send_msg
         self.tools_list: ToolsList = tools_list
 
 
@@ -25,11 +27,12 @@ class ReActAgent(Agent):
         self,
         name: str,
         llm_client: LLMClient,
+        send_msg: Callable[[str], None],
         tools_list: ToolsList,
         logger: Logger,
         num_retries: int = 3,
     ) -> None:
-        super().__init__(name, llm_client, tools_list)
+        super().__init__(name, llm_client, send_msg, tools_list)
 
         self.logger: Logger = logger
         self.num_retries = num_retries
@@ -72,6 +75,8 @@ class ReActAgent(Agent):
         )
         self.logger.log(self.name, {"think": reasoning_content})
         self.logger.log(self.name, {"assistant": content})
+        if len(content) > 0:
+            self.send_msg(content)
 
         messages_to_append = [
             {

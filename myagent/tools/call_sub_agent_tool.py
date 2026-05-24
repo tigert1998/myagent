@@ -19,18 +19,20 @@ class CallSubAgentTool(Tool):
     )
 
     class Parameters(BaseModel):
-        query: str = Field(description="")
+        query: str
 
     def __init__(
         self,
         name_builder: Callable[[], str],
         llm_client: "LLMClient",
+        send_msg: Callable[[str], None],
         base_tools_list: "BaseToolsList",
         logger_builder: Callable[[str], "Logger"],
         num_retries: int,
     ) -> None:
         self.name_builder = name_builder
         self.llm_client = llm_client
+        self.send_msg = send_msg
         self.base_tools_list = base_tools_list
         self.logger_builder = logger_builder
         self.num_retries = num_retries
@@ -44,6 +46,7 @@ class CallSubAgentTool(Tool):
         sub_agent = ReActAgent(
             name=name,
             llm_client=self.llm_client,
+            send_msg=self.send_msg,
             tools_list=self.base_tools_list,
             logger=logger,
             num_retries=self.num_retries,

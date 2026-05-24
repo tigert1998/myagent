@@ -20,6 +20,7 @@ class FullToolsList(ToolsList):
         call_sub_agent_tool = CallSubAgentTool(
             name_builder,
             llm_client,
+            send_msg,
             base_tools_list,
             logger_builder,
             num_retries,

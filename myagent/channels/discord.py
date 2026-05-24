@@ -121,6 +121,7 @@ class DiscordChannel:
                 agent: ReActAgent = ReActAgent(
                     "ReActAgent",
                     self.llm_client,
+                    send_msg,
                     full_tools_list,
                     logger,
                 )
@@ -128,12 +129,10 @@ class DiscordChannel:
                 session.agent = agent
 
                 agent.append_user_new_msg(message.clean_content)
-                messages, final_answer = agent.run()
-                send_msg(final_answer)
+                messages, _ = agent.run()
                 while True:
                     session.wait_for_user_new_msgs()
-                    messages, final_answer = agent.run(messages)
-                    send_msg(final_answer)
+                    messages, _ = agent.run(messages)
 
             except:
                 error_msg: str = traceback.format_exc()
