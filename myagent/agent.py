@@ -1,12 +1,9 @@
 import traceback
-from typing import Any, Optional
+from typing import Any, Optional, Callable
+import threading
 
 from myagent.loggers import Logger
-from myagent.tools.tools_list import (
-    ToolsList,
-    AttemptCompletionTool,
-    AskFollowupQuestionTool,
-)
+from myagent.tools.tools_list import ToolsList
 from myagent.llm_client import LLMClient
 from myagent.prompt import load_prompt
 
@@ -16,10 +13,12 @@ class Agent:
         self,
         name: str,
         llm_client: LLMClient,
+        send_msg: Callable[[str], None],
         tools_list: ToolsList,
     ) -> None:
         self.name: str = name
         self.llm_client: LLMClient = llm_client
+        self.send_msg = send_msg
         self.tools_list: ToolsList = tools_list
 
 
@@ -28,36 +27,71 @@ class ReActAgent(Agent):
         self,
         name: str,
         llm_client: LLMClient,
+        send_msg: Callable[[str], None],
         tools_list: ToolsList,
         logger: Logger,
         num_retries: int = 3,
     ) -> None:
-        super().__init__(name, llm_client, tools_list)
+        super().__init__(name, llm_client, send_msg, tools_list)
 
         self.logger: Logger = logger
         self.num_retries = num_retries
 
+        self.user_new_msgs_lock = threading.Lock()
+        self.user_new_msgs: list[str] = []
+
+    def append_user_new_msg(self, message):
+        with self.user_new_msgs_lock:
+            self.user_new_msgs.append(message)
+
+    def _get_user_new_msgs(self) -> list[str]:
+        with self.user_new_msgs_lock:
+            return self.user_new_msgs.copy()
+
+    def _clear_user_new_msgs(self, length: int):
+        with self.user_new_msgs_lock:
+            self.user_new_msgs = self.user_new_msgs[length:]
+
     def _try_one_iter(
         self, messages: list[dict[str, Any]]
     ) -> tuple[list[dict[str, Any]], Optional[str]]:
-        reasoning_content, _, tool_calls = self.llm_client.call(
+        # append new user messages
+        # call llm
+        # tool calls and observation
+
+        user_new_msgs = self._get_user_new_msgs()
+        if len(user_new_msgs) > 0:
+            user_new_msg = "\n".join(user_new_msgs)
+            self.logger.log(self.name, {"user": user_new_msg})
+            messages = messages + [
+                {
+                    "role": "user",
+                    "content": user_new_msg,
+                }
+            ]
+
+        reasoning_content, content, tool_calls = self.llm_client.call(
             messages, self.tools_list.schema()
         )
-        self.logger.log(self.name, {"thought": reasoning_content})
+        self.logger.log(self.name, {"think": reasoning_content})
+        self.logger.log(self.name, {"assistant": content})
+        if len(content) > 0:
+            self.send_msg(content)
 
         messages_to_append = [
             {
                 "role": "assistant",
                 "reasoning_content": reasoning_content,
-                "content": None,
-                "tool_calls": tool_calls,
+                "content": content,
+                **({"tool_calls": tool_calls} if len(tool_calls) > 0 else {}),
             }
         ]
 
         if len(tool_calls) == 0:
-            raise ValueError("len(tool_calls) == 0")
+            self._clear_user_new_msgs(len(user_new_msgs))
+            messages = messages + messages_to_append
+            return messages, content
 
-        final_answer = None
         for tool_call in tool_calls:
             call_id = tool_call["id"]
             name = tool_call["function"]["name"]
@@ -69,19 +103,17 @@ class ReActAgent(Agent):
                     self.name,
                     {"action": {"tool": name, "args": args}},
                 )
-                result = self.tools_list.execute_tool(name, args)
-                observation = result.content
-                final_answer = final_answer or result.final_answer
+                observation = self.tools_list.execute_tool(name, args)
             except:
                 observation = traceback.format_exc()
-                final_answer = final_answer or None
             self.logger.log(self.name, {"observation": observation})
             messages_to_append.append(
                 {"role": "tool", "tool_call_id": call_id, "content": observation}
             )
 
+        self._clear_user_new_msgs(len(user_new_msgs))
         messages = messages + messages_to_append
-        return messages, final_answer
+        return messages, None
 
     def _retry_one_iter(
         self, messages: list[dict[str, Any]]
@@ -93,28 +125,22 @@ class ReActAgent(Agent):
                 exception = e
         raise exception
 
-    def run(self, query: str) -> str:
-        react_prompt = load_prompt(
-            "prompts/react.md",
-            {
-                "attempt_completion_tool_name": AttemptCompletionTool.name,
-                "ask_followup_question_tool_name": AskFollowupQuestionTool.name,
-            },
-        )
-
-        messages: list[dict[str, Any]] = [
-            {
-                "role": "system",
-                "content": react_prompt,
-            },
-            {
-                "role": "user",
-                "content": query,
-            },
-        ]
-        self.logger.log(self.name, {"question": query})
+    def run(
+        self,
+        prev_messages: Optional[list[dict[str, Any]]] = None,
+    ) -> tuple[list[dict[str, Any]], str]:
+        if prev_messages is None:
+            react_prompt = load_prompt("prompts/react.md", {})
+            messages: list[dict[str, Any]] = [
+                {
+                    "role": "system",
+                    "content": react_prompt,
+                }
+            ]
+        else:
+            messages = prev_messages
 
         while True:
             messages, final_answer = self._retry_one_iter(messages)
             if final_answer is not None:
-                return final_answer
+                return messages, final_answer

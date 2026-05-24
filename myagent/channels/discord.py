@@ -6,7 +6,7 @@ import traceback
 import os.path as osp
 from time import time
 from concurrent.futures import Future
-from typing import Any, Callable
+from typing import Any, Optional
 
 import discord
 
@@ -17,46 +17,54 @@ from myagent.tools.full_tools_list import FullToolsList
 
 
 class DiscordChannel:
+    class Session:
+        agent: Optional[ReActAgent]
+        condition: threading.Condition
+
+        def __init__(self):
+            self.agent = None
+            self.condition = threading.Condition()
+
+        def append_user_new_msg(self, message: str):
+            if self.agent is None:
+                return
+            with self.condition:
+                self.agent.append_user_new_msg(message)
+                self.condition.notify_all()
+
+        def wait_for_user_new_msgs(self):
+            if self.agent is None:
+                return
+            with self.condition:
+                self.condition.wait_for(
+                    lambda: len(self.agent._get_user_new_msgs()) > 0
+                )
+
     def __init__(self, llm_config: dict[str, Any], token: str, log_path: str) -> None:
         self.llm_client: LLMClient = LLMClient.build(llm_config)
         self.token: str = token
         self.log_path: str = log_path
 
-        self.agents_running: dict[int, bool] = {}
+        self.messages_to_session: dict[int, DiscordChannel.Session] = {}
 
         intents: discord.Intents = discord.Intents.default()
         intents.message_content = True
         self.client: discord.Client = discord.Client(intents=intents)
         self.client.event(self.on_message)
 
-    def request_msg(self, channel: discord.TextChannel, user_id: int) -> str:
-        async def get_next_user_message() -> str:
-            def check(m: discord.Message) -> bool:
-                return (
-                    m.channel.id == channel.id
-                    and m.author.id == user_id
-                    and self.client.user in m.mentions
-                )
-
-            msg: discord.Message = await self.client.wait_for("message", check=check)
-            return msg.clean_content
-
-        future: Future[str] = asyncio.run_coroutine_threadsafe(
-            get_next_user_message(), self.client.loop
-        )
-        return future.result()
-
     def send_msg(
         self, channel: discord.TextChannel, user_id: int, content: str
-    ) -> None:
+    ) -> list[int]:
         content = f"<@{user_id}> {content}"
+        message_ids = []
         while len(content) > 0:
             content_to_send = content[:1900]
             future: Future[discord.Message] = asyncio.run_coroutine_threadsafe(
                 channel.send(content_to_send), self.client.loop
             )
-            future.result()
+            message_ids.append(future.result().id)
             content = content[1900:]
+        return message_ids
 
     async def on_message(self, message: discord.Message) -> None:
         if (
@@ -69,17 +77,28 @@ class DiscordChannel:
         if not isinstance(channel, discord.TextChannel):
             return
 
-        if self.agents_running.get(message.author.id, False):
+        if message.reference is not None and message.reference.message_id is not None:
+            # reply
+            if message.reference.message_id in self.messages_to_session:
+                self.messages_to_session[
+                    message.reference.message_id
+                ].append_user_new_msg(message.clean_content)
+                self.messages_to_session[message.id] = self.messages_to_session[
+                    message.reference.message_id
+                ]
             return
 
         def run_agent_in_thread() -> None:
-            self.agents_running[message.author.id] = True
-            send_msg: Callable[[str], None] = lambda content: self.send_msg(
-                channel=channel, user_id=message.author.id, content=content
-            )
-            request_msg: Callable[[], str] = lambda: self.request_msg(
-                channel=channel, user_id=message.author.id
-            )
+            session = DiscordChannel.Session()
+            self.messages_to_session[message.id] = session
+
+            def send_msg(content: str):
+                message_ids = self.send_msg(
+                    channel=channel, user_id=message.author.id, content=content
+                )
+                for message_id in message_ids:
+                    self.messages_to_session[message_id] = session
+
             try:
                 num_sub_agents = 0
 
@@ -94,7 +113,6 @@ class DiscordChannel:
 
                 full_tools_list = FullToolsList(
                     send_msg,
-                    request_msg,
                     sub_agent_name_builder,
                     self.llm_client,
                     lambda name: logger,
@@ -103,16 +121,25 @@ class DiscordChannel:
                 agent: ReActAgent = ReActAgent(
                     "ReActAgent",
                     self.llm_client,
+                    send_msg,
                     full_tools_list,
                     logger,
                 )
-                agent.run(message.clean_content)
+
+                session.agent = agent
+
+                agent.append_user_new_msg(message.clean_content)
+                messages, _ = agent.run()
+                while True:
+                    session.wait_for_user_new_msgs()
+                    messages, _ = agent.run(messages)
+
             except:
                 error_msg: str = traceback.format_exc()
                 error_msg = error_msg[-1900:]
                 send_msg(f"**MyAgent crashes:**\n```\n{error_msg}\n```\n")
             finally:
-                self.agents_running[message.author.id] = False
+                session.agent = None
 
         threading.Thread(target=run_agent_in_thread, daemon=True).start()
 
