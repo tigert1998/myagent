@@ -30,15 +30,17 @@ class ReActAgent(Agent):
         llm_client: LLMClient,
         tools_list: ToolsList,
         logger: Logger,
+        num_retries: int = 3,
     ) -> None:
         super().__init__(name, llm_client, tools_list)
 
         self.logger: Logger = logger
+        self.num_retries = num_retries
 
-    def _one_iter(
+    def _try_one_iter(
         self, messages: list[dict[str, Any]]
     ) -> tuple[list[dict[str, Any]], Optional[str]]:
-        reasoning_content, content, tool_calls = self.llm_client.call(
+        reasoning_content, _, tool_calls = self.llm_client.call(
             messages, self.tools_list.schema()
         )
         self.logger.log(self.name, {"thought": reasoning_content})
@@ -47,10 +49,13 @@ class ReActAgent(Agent):
             {
                 "role": "assistant",
                 "reasoning_content": reasoning_content,
-                "content": content,
-                **({"tool_calls": tool_calls} if len(tool_calls) > 0 else {}),
+                "content": None,
+                "tool_calls": tool_calls,
             }
         ]
+
+        if len(tool_calls) == 0:
+            raise ValueError("len(tool_calls) == 0")
 
         final_answer = None
         for tool_call in tool_calls:
@@ -75,17 +80,18 @@ class ReActAgent(Agent):
                 {"role": "tool", "tool_call_id": call_id, "content": observation}
             )
 
-        if len(tool_calls) == 0 and len(content) > 0:
-            messages_to_append.append(
-                {
-                    "role": "user",
-                    "content": "CRITICAL CONSTRAINT: The user cannot receive your direct text responses. "
-                    f"You MUST exclusively use the {AskFollowupQuestionTool.name} to communicate and interact with the user.",
-                }
-            )
-
         messages = messages + messages_to_append
         return messages, final_answer
+
+    def _retry_one_iter(
+        self, messages: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], Optional[str]]:
+        for _ in range(self.num_retries + 1):
+            try:
+                return self._try_one_iter(messages)
+            except Exception as e:
+                exception = e
+        raise exception
 
     def run(self, query: str) -> str:
         react_prompt = load_prompt(
@@ -109,6 +115,6 @@ class ReActAgent(Agent):
         self.logger.log(self.name, {"question": query})
 
         while True:
-            messages, final_answer = self._one_iter(messages)
+            messages, final_answer = self._retry_one_iter(messages)
             if final_answer is not None:
                 return final_answer
