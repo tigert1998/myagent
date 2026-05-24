@@ -38,7 +38,7 @@ class ReActAgent(Agent):
     def _one_iter(
         self, messages: list[dict[str, Any]]
     ) -> tuple[list[dict[str, Any]], Optional[str]]:
-        reasoning_content, _, tool_calls = self.llm_client.call(
+        reasoning_content, content, tool_calls = self.llm_client.call(
             messages, self.tools_list.schema()
         )
         self.logger.log(self.name, {"thought": reasoning_content})
@@ -72,6 +72,15 @@ class ReActAgent(Agent):
             self.logger.log(self.name, {"observation": observation})
             messages_to_append.append(
                 {"role": "tool", "tool_call_id": call_id, "content": observation}
+            )
+
+        if len(tool_calls) == 0 and len(content) > 0:
+            messages_to_append.append(
+                {
+                    "role": "user",
+                    "content": "CRITICAL CONSTRAINT: The user cannot receive your direct text responses. "
+                    f"You MUST exclusively use the {AskFollowupQuestionTool.name} to communicate and interact with the user.",
+                }
             )
 
         messages = messages + messages_to_append
