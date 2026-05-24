@@ -38,20 +38,16 @@ class ReActAgent(Agent):
         self.user_new_msgs: list[str] = []
 
     def append_user_new_msg(self, message):
-        self.user_new_msgs_lock.acquire()
-        self.user_new_msgs.append(message)
-        self.user_new_msgs_lock.release()
+        with self.user_new_msgs_lock:
+            self.user_new_msgs.append(message)
 
     def _get_user_new_msgs(self) -> list[str]:
-        self.user_new_msgs_lock.acquire()
-        user_new_msgs = self.user_new_msgs.copy()
-        self.user_new_msgs_lock.release()
-        return user_new_msgs
+        with self.user_new_msgs_lock:
+            return self.user_new_msgs.copy()
 
     def _clear_user_new_msgs(self, length: int):
-        self.user_new_msgs_lock.acquire()
-        self.user_new_msgs = self.user_new_msgs[length:]
-        self.user_new_msgs_lock.release()
+        with self.user_new_msgs_lock:
+            self.user_new_msgs = self.user_new_msgs[length:]
 
     def _try_one_iter(
         self, messages: list[dict[str, Any]]
