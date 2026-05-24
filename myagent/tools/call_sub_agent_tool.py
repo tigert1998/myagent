@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Callable
 
 from pydantic import BaseModel, Field
 
-from myagent.tools.tool import Tool
+from myagent.tools.tool import Tool, ToolResult
 
 if TYPE_CHECKING:
     from myagent.tools.tools_list import BaseToolsList
@@ -27,13 +27,15 @@ class CallSubAgentTool(Tool):
         llm_client: "LLMClient",
         base_tools_list: "BaseToolsList",
         logger_builder: Callable[[str], "Logger"],
+        num_retries: int,
     ) -> None:
         self.name_builder = name_builder
         self.llm_client = llm_client
         self.base_tools_list = base_tools_list
         self.logger_builder = logger_builder
+        self.num_retries = num_retries
 
-    def invoke(self, query: str) -> str:
+    def invoke(self, query: str) -> ToolResult:
         from myagent.agent import ReActAgent
 
         name = self.name_builder()
@@ -44,6 +46,7 @@ class CallSubAgentTool(Tool):
             llm_client=self.llm_client,
             tools_list=self.base_tools_list,
             logger=logger,
+            num_retries=self.num_retries,
         )
 
-        return sub_agent.run(query)
+        return ToolResult(sub_agent.run(query))
