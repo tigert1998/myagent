@@ -5,9 +5,9 @@ import os.path as osp
 from typing import Any, Callable, Literal
 
 import frontmatter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from myagent.tools.tool import Tool, ToolResult
+from myagent.tools.tool import Tool
 
 
 def _json_returns(obj: Any) -> str:
@@ -38,14 +38,12 @@ class ToolsList:
 
         raise ValueError(f'Invalid tool name "{name}"')
 
-    def execute_tool(self, name: str, args: dict[str, Any]) -> ToolResult:
+    def execute_tool(self, name: str, args: dict[str, Any]) -> str:
         tool_found: bool = False
         for tool in self.tools:
             if name == tool.name:
                 tool_found = True
-                result = tool.invoke(**args)
-                output = result.content
-                final_answer = result.final_answer
+                output = tool.invoke(**args)
                 break
 
         if not tool_found:
@@ -59,7 +57,7 @@ class ToolsList:
 
         output = output + "\n\n" + "\n\n".join(additional_output)
 
-        return ToolResult(output, final_answer)
+        return output
 
 
 class PlanItem:
@@ -150,8 +148,8 @@ class ReadTODOTool(TODOTool):
     def __init__(self, planning_state: PlanningState) -> None:
         super().__init__(planning_state)
 
-    def invoke(self) -> ToolResult:
-        return ToolResult(self.render_for_agent())
+    def invoke(self) -> str:
+        return self.render_for_agent()
 
 
 class WriteTODOTool(TODOTool):
@@ -181,11 +179,11 @@ class WriteTODOTool(TODOTool):
         super().__init__(planning_state)
         self.send_msg = send_msg
 
-    def invoke(self, todo_items: list[dict[str, str]]) -> ToolResult:
+    def invoke(self, todo_items: list[dict[str, str]]) -> str:
         self.planning_state.update(todo_items)
         self.planning_state.rounds_since_update = 0
         self.send_msg(self.render_for_user())
-        return ToolResult(_json_returns({"success": True}))
+        return _json_returns({"success": True})
 
     def inject(self) -> str:
         if (
@@ -228,7 +226,7 @@ class ReadFileTool(Tool):
         offset: int = 1
         limit: int = 2000
 
-    def invoke(self, path: str, offset: int, limit: int) -> ToolResult:
+    def invoke(self, path: str, offset: int, limit: int) -> str:
         l: int = int(offset) - 1
         r: int = l + int(limit)
         with open(path, "r", encoding="utf-8") as f:
@@ -236,7 +234,7 @@ class ReadFileTool(Tool):
             lines: list[str] = content.split("\n")
             lines = lines[l:r]
             num_digits = len(str(r))
-            return ToolResult(
+            return (
                 f"File: {path}\n```\n"
                 + "\n".join(
                     [
@@ -244,7 +242,7 @@ class ReadFileTool(Tool):
                         for i, line in enumerate(lines)
                     ]
                 )
-                + "\n```\n",
+                + "\n```\n"
             )
 
 
@@ -259,10 +257,10 @@ class WriteFileTool(Tool):
         path: str
         content: str
 
-    def invoke(self, path: str, content: str) -> ToolResult:
+    def invoke(self, path: str, content: str) -> str:
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
-        return ToolResult(_json_returns({"success": True}))
+        return _json_returns({"success": True})
 
 
 class EditFileTool(Tool):
@@ -285,31 +283,28 @@ class EditFileTool(Tool):
         old_str: str
         new_str: str
 
-    def invoke(self, path: str, old_str: str, new_str: str) -> ToolResult:
+    def invoke(self, path: str, old_str: str, new_str: str) -> str:
         with open(path, "r", encoding="utf-8") as f:
             content: str = f.read()
         num_matches: int = content.count(old_str)
         if num_matches != 1:
-            return ToolResult(
-                _json_returns(
-                    {
-                        "success": False,
-                        "num_matches": num_matches,
-                        "num_replaces": 0,
-                    }
-                ),
+            return _json_returns(
+                {
+                    "success": False,
+                    "num_matches": num_matches,
+                    "num_replaces": 0,
+                }
             )
+
         content = content.replace(old_str, new_str)
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
-        return ToolResult(
-            _json_returns(
-                {
-                    "success": True,
-                    "num_matches": num_matches,
-                    "num_replaces": num_matches,
-                }
-            ),
+        return _json_returns(
+            {
+                "success": True,
+                "num_matches": num_matches,
+                "num_replaces": num_matches,
+            }
         )
 
 
@@ -324,7 +319,7 @@ class BashTool(Tool):
         cmd: str
         timeout: float = 10
 
-    def invoke(self, cmd: str, timeout: float) -> ToolResult:
+    def invoke(self, cmd: str, timeout: float) -> str:
         p: subprocess.Popen[str] = subprocess.Popen(
             cmd,
             shell=True,
@@ -336,63 +331,13 @@ class BashTool(Tool):
         stdout: str
         stderr: str
         stdout, stderr = p.communicate(timeout=timeout)
-        return ToolResult(
-            _json_returns(
-                {
-                    "stdout": stdout,
-                    "stderr": stderr,
-                    "returncode": p.returncode,
-                }
-            ),
+        return _json_returns(
+            {
+                "stdout": stdout,
+                "stderr": stderr,
+                "returncode": p.returncode,
+            }
         )
-
-
-class AskFollowupQuestionTool(Tool):
-    name: str = "ask_followup_question"
-
-    desc: str = (
-        "Request additional input or clarification directly from the user. "
-        "CRITICAL: This tool is the ONLY mechanism to ask the user for information. "
-        "Example:\n"
-        "User: Schedule a meeting with John.\n"
-        'Assistant: ask_followup_question(question="I\'d be happy to help! Could you please specify the date and time for the meeting?")'
-    )
-
-    class Parameters(BaseModel):
-        question: str
-
-    send_msg: Callable[[str], None]
-    request_msg: Callable[[], str]
-
-    def __init__(
-        self, send_msg: Callable[[str], None], request_msg: Callable[[], str]
-    ) -> None:
-        self.send_msg = send_msg
-        self.request_msg = request_msg
-
-    def invoke(self, question: str) -> ToolResult:
-        self.send_msg(question)
-        return ToolResult("> " + self.request_msg() + "\n")
-
-
-class AttemptCompletionTool(Tool):
-    name: str = "attempt_completion"
-
-    desc: str = "Use this tool to present the result of your work to the user."
-
-    send_msg: Callable[[str], None]
-
-    class Parameters(BaseModel):
-        content: str = Field(
-            description="Final result message to deliver to the user once the task is complete."
-        )
-
-    def __init__(self, send_msg: Callable[[str], None]) -> None:
-        self.send_msg = send_msg
-
-    def invoke(self, content: str) -> ToolResult:
-        self.send_msg(content)
-        return ToolResult(_json_returns({"success": True}), content)
 
 
 def _skill_doc_inject_envs(content: str, skill_dir: str) -> str:
@@ -438,26 +383,22 @@ class LoadSkillTool(Tool):
             ls.append(f"Skill path: {skill_path}\n{metadata}")
         return "\n\n".join(ls) + "\n"
 
-    def invoke(self, skill_name: str) -> ToolResult:
+    def invoke(self, skill_name: str) -> str:
         folder: str = osp.expanduser(osp.join("~/.agents/skills", skill_name))
         skill_md_path: str = osp.join(folder, "SKILL.md")
         with open(skill_md_path, "r") as f:
             md: frontmatter.Post = frontmatter.load(f)
         content: str = _skill_doc_inject_envs(md.content, folder)
-        return ToolResult(content)
+        return content
 
 
 class BaseToolsList(ToolsList):
-    def __init__(
-        self, send_msg: Callable[[str], None], request_msg: Callable[[], str]
-    ) -> None:
+    def __init__(self, send_msg: Callable[[str], None]) -> None:
         super().__init__(
             [
                 ReadFileTool(),
                 WriteFileTool(),
                 EditFileTool(),
-                AskFollowupQuestionTool(send_msg, request_msg),
-                AttemptCompletionTool(send_msg),
                 LoadSkillTool(),
                 BashTool(),
             ]

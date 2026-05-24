@@ -3,22 +3,13 @@ from typing import Optional, Any
 from pydantic import BaseModel
 
 
-class ToolResult:
-    content: str
-    final_answer: Optional[str]
-
-    def __init__(self, content: str, final_answer: Optional[str] = None):
-        self.content = content
-        self.final_answer = final_answer
-
-
 class Tool:
     name: str
     desc: str
 
     class Parameters(BaseModel): ...
 
-    def invoke(self, *args, **kwargs) -> ToolResult:
+    def invoke(self, *args, **kwargs) -> str:
         raise NotImplementedError()
 
     def inject(self) -> Optional[str]:
