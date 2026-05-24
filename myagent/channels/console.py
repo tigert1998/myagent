@@ -15,7 +15,11 @@ def send_msg(content: str) -> None:
 
 
 def request_msg() -> str:
-    return TerminalPrompter.instance().prompt_input("User")
+    try:
+        return TerminalPrompter.instance().prompt_input("User")
+    except EOFError, KeyboardInterrupt:
+        print()
+        exit(0)
 
 
 if __name__ == "__main__":
