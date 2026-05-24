@@ -2,7 +2,7 @@ import traceback
 from typing import Any, Optional
 
 from myagent.loggers import Logger
-from myagent.tools.tools_list import ToolsList
+from myagent.tools.tools_list import ToolsList, NotifyUserTool
 from myagent.llm_client import LLMClient
 from myagent.prompt import load_prompt
 
@@ -47,6 +47,7 @@ class ReActAgent(Agent):
             }
         ]
 
+        final_answer = None
         for tool_call in tool_calls:
             call_id = tool_call["id"]
             name = tool_call["function"]["name"]
@@ -60,10 +61,10 @@ class ReActAgent(Agent):
                 )
                 result = self.tools_list.execute_tool(name, args)
                 observation = result.content
-                final_answer = result.final_answer
+                final_answer = final_answer or result.final_answer
             except:
                 observation = traceback.format_exc()
-                final_answer = None
+                final_answer = final_answer or None
             self.logger.log(self.name, {"observation": observation})
             messages_to_append.append(
                 {"role": "tool", "tool_call_id": call_id, "content": observation}
@@ -73,7 +74,9 @@ class ReActAgent(Agent):
         return messages, final_answer
 
     def run(self, query: str) -> str:
-        react_prompt = load_prompt("prompts/react.md", {})
+        react_prompt = load_prompt(
+            "prompts/react.md", {"notify_user_tool_name": NotifyUserTool.name}
+        )
 
         messages: list[dict[str, Any]] = [
             {
