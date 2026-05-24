@@ -11,11 +11,11 @@ from myagent.loggers import JsonlLogger, TerminalPrompter
 
 
 def send_msg(content: str) -> None:
-    TerminalPrompter.instance().prompt_notify("MyAgent updates", content)
+    TerminalPrompter.instance().prompt_notify("MyAgent", content)
 
 
 def request_msg() -> str:
-    return TerminalPrompter.instance().prompt_input("User replies")
+    return TerminalPrompter.instance().prompt_input("User")
 
 
 if __name__ == "__main__":
@@ -40,7 +40,6 @@ if __name__ == "__main__":
 
     full_tools_list = FullToolsList(
         send_msg,
-        request_msg,
         sub_agent_name_builder,
         llm_client,
         lambda name: logger,
@@ -53,5 +52,7 @@ if __name__ == "__main__":
         logger,
     )
 
-    query: str = TerminalPrompter.instance().prompt_input("User queries")
-    answer: str = agent.run(query)
+    while True:
+        agent.append_user_new_msg(request_msg())
+        messages, answer = agent.run()
+        send_msg(answer)
