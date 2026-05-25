@@ -36,7 +36,8 @@ class ToolsList:
             if inject is not None:
                 additional_output.append(inject)
 
-        output = output + "\n\n" + "\n\n".join(additional_output)
+        if len(additional_output) > 0:
+            output = output + "\n\n" + "\n\n".join(additional_output)
 
         return output
 

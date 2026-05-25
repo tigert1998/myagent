@@ -1,6 +1,7 @@
 import os
 import os.path as osp
 import subprocess
+import signal
 
 from pydantic import BaseModel
 import frontmatter
@@ -124,15 +125,26 @@ class BashTool(Tool):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            preexec_fn=os.setsid,
         )
-        stdout: str
-        stderr: str
-        stdout, stderr = p.communicate(timeout=timeout)
+
+        try:
+            stdout, stderr = p.communicate(timeout=timeout)
+            comment = None
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            stdout, stderr = p.communicate()
+            comment = "timeout"
+
         return json_md(
             {
                 "stdout": stdout,
                 "stderr": stderr,
                 "returncode": p.returncode,
+                "comment": comment,
             }
         )
 

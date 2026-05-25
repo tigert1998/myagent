@@ -1,4 +1,4 @@
-from typing import Literal, Callable
+from typing import Literal, Callable, Optional
 
 from myagent.tools.tool import Tool, json_md
 from myagent.tools.tools_list import ToolsList
@@ -131,7 +131,7 @@ class WriteTODOTool(TODOTool):
         self.send_msg(self.render_for_user())
         return json_md({"success": True})
 
-    def inject(self) -> str:
+    def inject(self) -> Optional[str]:
         if (
             self.planning_state.rounds_since_update
             >= self.planning_state.reminder_rounds
@@ -141,7 +141,7 @@ class WriteTODOTool(TODOTool):
             else:
                 output = f"REMINDER: There are {self.planning_state.rounds_since_update} rounds since last plan update. Update your plan with `{self.name}` tool ASAP."
         else:
-            output = ""
+            output = None
 
         self.planning_state.rounds_since_update += 1
         return output
