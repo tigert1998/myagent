@@ -107,13 +107,18 @@ class ReActAgent(Agent):
                     self.name,
                     {"action": {"tool": name, "args": args}},
                 )
-                observation = self.tools_list.execute_tool(name, args)
+                result = self.tools_list.execute_tool(name, args)
+                observation = result.for_agent
+                msg_to_send = result.for_user
             except:
                 observation = traceback.format_exc()
+                msg_to_send = None
             self.logger.log(self.name, {"observation": observation})
             messages_to_append.append(
                 {"role": "tool", "tool_call_id": call_id, "content": observation}
             )
+            if msg_to_send is not None:
+                self.send_msg(msg_to_send)
 
         self._clear_user_new_msgs(len(user_new_msgs))
         if len(tool_calls) > 0:

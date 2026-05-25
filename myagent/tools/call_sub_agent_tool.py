@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 from pydantic import BaseModel
 
-from myagent.tools.tool import Tool
+from myagent.tools.tool import Tool, ToolResult
 
 if TYPE_CHECKING:
     from myagent.agent import ReActAgent
@@ -27,7 +27,7 @@ class CallSubAgentTool(Tool):
         self.build_sub_agent = build_sub_agent
         self.destroy_sub_agent = destroy_sub_agent
 
-    def invoke(self, query: str) -> str:
+    def invoke(self, query: str) -> ToolResult:
         sub_agent = self.build_sub_agent()
 
         sub_agent.append_user_new_msg(query)
@@ -35,4 +35,4 @@ class CallSubAgentTool(Tool):
 
         if self.destroy_sub_agent is not None:
             self.destroy_sub_agent(sub_agent)
-        return final_answer
+        return ToolResult(final_answer)

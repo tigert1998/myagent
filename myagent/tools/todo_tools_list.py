@@ -1,6 +1,6 @@
-from typing import Literal, Callable, Optional
+from typing import Literal, Optional
 
-from myagent.tools.tool import Tool, json_md
+from myagent.tools.tool import Tool, json_md, ToolResult
 from myagent.tools.tools_list import ToolsList
 
 from pydantic import BaseModel
@@ -94,8 +94,8 @@ class ReadTODOTool(TODOTool):
     def __init__(self, planning_state: PlanningState) -> None:
         super().__init__(planning_state)
 
-    def invoke(self) -> str:
-        return self.render_for_agent()
+    def invoke(self) -> ToolResult:
+        return ToolResult(self.render_for_agent())
 
 
 class WriteTODOTool(TODOTool):
@@ -119,17 +119,13 @@ class WriteTODOTool(TODOTool):
 
         todo_items: list[Item]
 
-    def __init__(
-        self, planning_state: PlanningState, send_msg: Callable[[str], None]
-    ) -> None:
+    def __init__(self, planning_state: PlanningState) -> None:
         super().__init__(planning_state)
-        self.send_msg = send_msg
 
-    def invoke(self, todo_items: list[dict[str, str]]) -> str:
+    def invoke(self, todo_items: list[dict[str, str]]) -> ToolResult:
         self.planning_state.update(todo_items)
         self.planning_state.rounds_since_update = 0
-        self.send_msg(self.render_for_user())
-        return json_md({"success": True})
+        return ToolResult(json_md({"success": True}), self.render_for_user())
 
     def inject(self) -> Optional[str]:
         if (
@@ -148,11 +144,11 @@ class WriteTODOTool(TODOTool):
 
 
 class TODOToolsList(ToolsList):
-    def __init__(self, send_msg: Callable[[str], None]) -> None:
+    def __init__(self) -> None:
         planning_state = PlanningState()
         super().__init__(
             [
                 ReadTODOTool(planning_state),
-                WriteTODOTool(planning_state, send_msg),
+                WriteTODOTool(planning_state),
             ]
         )

@@ -4,13 +4,22 @@ from typing import Optional, Any
 from pydantic import BaseModel
 
 
+class ToolResult:
+    for_agent: str
+    for_user: Optional[str]
+
+    def __init__(self, for_agent: str, for_user: Optional[str] = None):
+        self.for_agent = for_agent
+        self.for_user = for_user
+
+
 class Tool:
     name: str
     desc: str
 
     class Parameters(BaseModel): ...
 
-    def invoke(self, *args, **kwargs) -> str:
+    def invoke(self, *args, **kwargs) -> ToolResult:
         raise NotImplementedError()
 
     def inject(self) -> Optional[str]:

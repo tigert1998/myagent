@@ -1,6 +1,6 @@
 from typing import Any
 
-from myagent.tools.tool import Tool
+from myagent.tools.tool import Tool, ToolResult
 
 
 class ToolsList:
@@ -19,12 +19,14 @@ class ToolsList:
 
         raise ValueError(f'Invalid tool name "{name}"')
 
-    def execute_tool(self, name: str, args: dict[str, Any]) -> str:
+    def execute_tool(self, name: str, args: dict[str, Any]) -> ToolResult:
         tool_found: bool = False
         for tool in self.tools:
             if name == tool.name:
                 tool_found = True
-                output = tool.invoke(**args)
+                result = tool.invoke(**args)
+                for_agent = result.for_agent
+                for_user = result.for_user
                 break
 
         if not tool_found:
@@ -37,9 +39,9 @@ class ToolsList:
                 additional_output.append(inject)
 
         if len(additional_output) > 0:
-            output = output + "\n\n" + "\n\n".join(additional_output)
+            for_agent = for_agent + "\n\n" + "\n\n".join(additional_output)
 
-        return output
+        return ToolResult(for_agent, for_user)
 
 
 class ConcatToolsList(ToolsList):

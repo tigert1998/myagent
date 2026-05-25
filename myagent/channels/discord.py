@@ -105,7 +105,7 @@ class DiscordChannel:
                 logger: JsonlLogger = JsonlLogger(
                     osp.join(self.log_path, f"{message.author.id}-{time():.3f}.jsonl")
                 )
-                basic_tools_list = build_basic_tools_list(send_msg)
+                basic_tools_list = build_basic_tools_list()
 
                 num_sub_agents = 0
 
@@ -126,7 +126,7 @@ class DiscordChannel:
                     session.agents.remove(sub_agent)
 
                 full_tools_list = build_full_tools_list(
-                    send_msg, build_sub_agent, destroy_sub_agent
+                    build_sub_agent, destroy_sub_agent
                 )
 
                 agent: ReActAgent = ReActAgent(

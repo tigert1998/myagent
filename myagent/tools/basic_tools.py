@@ -6,8 +6,7 @@ import signal
 from pydantic import BaseModel
 import frontmatter
 
-from myagent.tools.tools_list import Tool
-from myagent.tools.tool import json_md
+from myagent.tools.tool import json_md, Tool, ToolResult
 
 
 class ReadFileTool(Tool):
@@ -24,7 +23,7 @@ class ReadFileTool(Tool):
         offset: int = 1
         limit: int = 2000
 
-    def invoke(self, path: str, offset: int, limit: int) -> str:
+    def invoke(self, path: str, offset: int, limit: int) -> ToolResult:
         l: int = int(offset) - 1
         r: int = l + int(limit)
         with open(path, "r", encoding="utf-8") as f:
@@ -32,7 +31,7 @@ class ReadFileTool(Tool):
             lines: list[str] = content.split("\n")
             lines = lines[l:r]
             num_digits = len(str(r))
-            return (
+            return ToolResult(
                 f"File: {path}\n```\n"
                 + "\n".join(
                     [
@@ -55,10 +54,10 @@ class WriteFileTool(Tool):
         path: str
         content: str
 
-    def invoke(self, path: str, content: str) -> str:
+    def invoke(self, path: str, content: str) -> ToolResult:
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
-        return json_md({"success": True})
+        return ToolResult(json_md({"success": True}))
 
 
 class EditFileTool(Tool):
@@ -81,28 +80,32 @@ class EditFileTool(Tool):
         old_str: str
         new_str: str
 
-    def invoke(self, path: str, old_str: str, new_str: str) -> str:
+    def invoke(self, path: str, old_str: str, new_str: str) -> ToolResult:
         with open(path, "r", encoding="utf-8") as f:
             content: str = f.read()
         num_matches: int = content.count(old_str)
         if num_matches != 1:
-            return json_md(
-                {
-                    "success": False,
-                    "num_matches": num_matches,
-                    "num_replaces": 0,
-                }
+            return ToolResult(
+                json_md(
+                    {
+                        "success": False,
+                        "num_matches": num_matches,
+                        "num_replaces": 0,
+                    }
+                )
             )
 
         content = content.replace(old_str, new_str)
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
-        return json_md(
-            {
-                "success": True,
-                "num_matches": num_matches,
-                "num_replaces": num_matches,
-            }
+        return ToolResult(
+            json_md(
+                {
+                    "success": True,
+                    "num_matches": num_matches,
+                    "num_replaces": num_matches,
+                }
+            )
         )
 
 
@@ -117,7 +120,7 @@ class BashTool(Tool):
         cmd: str
         timeout: float = 10
 
-    def invoke(self, cmd: str, timeout: float) -> str:
+    def invoke(self, cmd: str, timeout: float) -> ToolResult:
         p: subprocess.Popen[str] = subprocess.Popen(
             cmd,
             shell=True,
@@ -139,13 +142,15 @@ class BashTool(Tool):
             stdout, stderr = p.communicate()
             comment = "timeout"
 
-        return json_md(
-            {
-                "stdout": stdout,
-                "stderr": stderr,
-                "returncode": p.returncode,
-                "comment": comment,
-            }
+        return ToolResult(
+            json_md(
+                {
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "returncode": p.returncode,
+                    "comment": comment,
+                }
+            )
         )
 
 
@@ -192,10 +197,10 @@ class LoadSkillTool(Tool):
             ls.append(f"Skill path: {skill_path}\n{metadata}")
         return "\n\n".join(ls) + "\n"
 
-    def invoke(self, skill_name: str) -> str:
+    def invoke(self, skill_name: str) -> ToolResult:
         folder: str = osp.expanduser(osp.join("~/.agents/skills", skill_name))
         skill_md_path: str = osp.join(folder, "SKILL.md")
         with open(skill_md_path, "r") as f:
             md: frontmatter.Post = frontmatter.load(f)
         content: str = _skill_doc_inject_envs(md.content, folder)
-        return content
+        return ToolResult(content)
