@@ -78,12 +78,11 @@ class ReActAgent(Agent):
         if len(content) > 0:
             self.send_msg(content)
 
-        messages_to_append = [
+        messages_to_append: list[dict[str, Any]] = [
             {
                 "role": "assistant",
                 "reasoning_content": reasoning_content,
                 "content": content,
-                **({"tool_calls": tool_calls} if len(tool_calls) > 0 else {}),
             }
         ]
 
@@ -92,7 +91,12 @@ class ReActAgent(Agent):
             messages = messages + messages_to_append
             return messages, content
 
-        for tool_call in tool_calls:
+        for tool_call_idx in range(len(tool_calls)):
+            if len(self._get_user_new_msgs()) > len(user_new_msgs):
+                tool_calls = tool_calls[:tool_call_idx]
+                break
+
+            tool_call = tool_calls[tool_call_idx]
             call_id = tool_call["id"]
             name = tool_call["function"]["name"]
             try:
@@ -112,6 +116,8 @@ class ReActAgent(Agent):
             )
 
         self._clear_user_new_msgs(len(user_new_msgs))
+        if len(tool_calls) > 0:
+            messages_to_append[0]["tool_calls"] = tool_calls
         messages = messages + messages_to_append
         return messages, None
 

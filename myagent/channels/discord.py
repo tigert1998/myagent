@@ -6,38 +6,40 @@ import traceback
 import os.path as osp
 from time import time
 from concurrent.futures import Future
-from typing import Any, Optional
+from typing import Any
 
 import discord
 
 from myagent.agent import ReActAgent
 from myagent.llm_client import LLMClient
 from myagent.loggers import JsonlLogger
-from myagent.tools.full_tools_list import FullToolsList
+from myagent.tools.build_tools_lists import (
+    build_basic_tools_list,
+    build_full_tools_list,
+)
 
 
 class DiscordChannel:
     class Session:
-        agent: Optional[ReActAgent]
+        agents: list[ReActAgent]
         condition: threading.Condition
 
         def __init__(self):
-            self.agent = None
+            self.agents = []
             self.condition = threading.Condition()
 
         def append_user_new_msg(self, message: str):
-            if self.agent is None:
-                return
             with self.condition:
-                self.agent.append_user_new_msg(message)
+                for agent in self.agents:
+                    agent.append_user_new_msg(message)
                 self.condition.notify_all()
 
         def wait_for_user_new_msgs(self):
-            if self.agent is None:
-                return
             with self.condition:
                 self.condition.wait_for(
-                    lambda: len(self.agent._get_user_new_msgs()) > 0
+                    lambda: any(
+                        [len(agent._get_user_new_msgs()) > 0 for agent in self.agents]
+                    )
                 )
 
     def __init__(self, llm_config: dict[str, Any], token: str, log_path: str) -> None:
@@ -100,22 +102,31 @@ class DiscordChannel:
                     self.messages_to_session[message_id] = session
 
             try:
-                num_sub_agents = 0
-
-                def sub_agent_name_builder():
-                    nonlocal num_sub_agents
-                    num_sub_agents += 1
-                    return f"SubAgent #{num_sub_agents}"
-
                 logger: JsonlLogger = JsonlLogger(
                     osp.join(self.log_path, f"{message.author.id}-{time():.3f}.jsonl")
                 )
+                basic_tools_list = build_basic_tools_list(send_msg)
 
-                full_tools_list = FullToolsList(
-                    send_msg,
-                    sub_agent_name_builder,
-                    self.llm_client,
-                    lambda name: logger,
+                num_sub_agents = 0
+
+                def build_sub_agent():
+                    nonlocal num_sub_agents
+                    num_sub_agents += 1
+                    sub_agent = ReActAgent(
+                        f"SubAgent #{num_sub_agents}",
+                        self.llm_client,
+                        send_msg,
+                        basic_tools_list,
+                        logger,
+                    )
+                    session.agents.append(sub_agent)
+                    return sub_agent
+
+                def destroy_sub_agent(sub_agent: ReActAgent):
+                    session.agents.remove(sub_agent)
+
+                full_tools_list = build_full_tools_list(
+                    send_msg, build_sub_agent, destroy_sub_agent
                 )
 
                 agent: ReActAgent = ReActAgent(
@@ -126,7 +137,7 @@ class DiscordChannel:
                     logger,
                 )
 
-                session.agent = agent
+                session.agents = [agent]
 
                 agent.append_user_new_msg(message.clean_content)
                 messages, _ = agent.run()
@@ -139,7 +150,7 @@ class DiscordChannel:
                 error_msg = error_msg[-1900:]
                 send_msg(f"**MyAgent crashes:**\n```\n{error_msg}\n```\n")
             finally:
-                session.agent = None
+                session.agents = []
 
         threading.Thread(target=run_agent_in_thread, daemon=True).start()
 

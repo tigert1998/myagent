@@ -5,7 +5,10 @@ from time import time
 from typing import Any
 
 from myagent.llm_client import LLMClient
-from myagent.tools.full_tools_list import FullToolsList
+from myagent.tools.build_tools_lists import (
+    build_full_tools_list,
+    build_basic_tools_list,
+)
 from myagent.agent import ReActAgent
 from myagent.loggers import JsonlLogger, TerminalPrompter
 
@@ -31,23 +34,26 @@ if __name__ == "__main__":
         config: dict[str, Any] = json.load(f)
     llm_client: LLMClient = LLMClient.build(config["llm"])
 
-    num_sub_agents = 0
-
-    def sub_agent_name_builder():
-        global num_sub_agents
-        num_sub_agents += 1
-        return f"SubAgent #{num_sub_agents}"
-
     logger: JsonlLogger = JsonlLogger(
         osp.join(config["channels"]["console"]["log"], f"{time():.3f}.jsonl")
     )
 
-    full_tools_list = FullToolsList(
-        send_msg,
-        sub_agent_name_builder,
-        llm_client,
-        lambda name: logger,
-    )
+    basic_tools_list = build_basic_tools_list(send_msg)
+
+    num_sub_agents = 0
+
+    def build_sub_agent() -> ReActAgent:
+        global num_sub_agents
+        num_sub_agents += 1
+        return ReActAgent(
+            f"SubAgent #{num_sub_agents}",
+            llm_client,
+            send_msg,
+            basic_tools_list,
+            logger,
+        )
+
+    full_tools_list = build_full_tools_list(send_msg, build_sub_agent)
 
     agent: ReActAgent = ReActAgent(
         "ReActAgent",

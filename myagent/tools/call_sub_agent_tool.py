@@ -1,13 +1,11 @@
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from myagent.tools.tool import Tool
 
 if TYPE_CHECKING:
-    from myagent.tools.tools_list import BaseToolsList
-    from myagent.llm_client import LLMClient
-    from myagent.loggers import Logger
+    from myagent.agent import ReActAgent
 
 
 class CallSubAgentTool(Tool):
@@ -23,35 +21,18 @@ class CallSubAgentTool(Tool):
 
     def __init__(
         self,
-        name_builder: Callable[[], str],
-        llm_client: "LLMClient",
-        send_msg: Callable[[str], None],
-        base_tools_list: "BaseToolsList",
-        logger_builder: Callable[[str], "Logger"],
-        num_retries: int,
+        build_sub_agent: Callable[[], "ReActAgent"],
+        destroy_sub_agent: Optional[Callable[["ReActAgent"], None]] = None,
     ) -> None:
-        self.name_builder = name_builder
-        self.llm_client = llm_client
-        self.send_msg = send_msg
-        self.base_tools_list = base_tools_list
-        self.logger_builder = logger_builder
-        self.num_retries = num_retries
+        self.build_sub_agent = build_sub_agent
+        self.destroy_sub_agent = destroy_sub_agent
 
     def invoke(self, query: str) -> str:
-        from myagent.agent import ReActAgent
-
-        name = self.name_builder()
-        logger = self.logger_builder(name)
-
-        sub_agent = ReActAgent(
-            name=name,
-            llm_client=self.llm_client,
-            send_msg=self.send_msg,
-            tools_list=self.base_tools_list,
-            logger=logger,
-            num_retries=self.num_retries,
-        )
+        sub_agent = self.build_sub_agent()
 
         sub_agent.append_user_new_msg(query)
         _, final_answer = sub_agent.run()
+
+        if self.destroy_sub_agent is not None:
+            self.destroy_sub_agent(sub_agent)
         return final_answer

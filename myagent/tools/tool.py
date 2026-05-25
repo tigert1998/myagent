@@ -1,3 +1,4 @@
+import json
 from typing import Optional, Any
 
 from pydantic import BaseModel
@@ -24,3 +25,15 @@ class Tool:
                 "parameters": self.Parameters.model_json_schema(),
             },
         }
+
+
+def json_md(obj: Any) -> str:
+    return (
+        "```json\n"
+        + json.dumps(
+            obj,
+            indent=4,
+            ensure_ascii=False,
+        )
+        + "\n```\n"
+    )
