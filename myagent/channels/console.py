@@ -38,7 +38,7 @@ if __name__ == "__main__":
         osp.join(config["channels"]["console"]["log"], f"{time():.3f}.jsonl")
     )
 
-    basic_tools_list = build_basic_tools_list(send_msg)
+    basic_tools_list = build_basic_tools_list()
 
     num_sub_agents = 0
 
@@ -53,7 +53,7 @@ if __name__ == "__main__":
             logger,
         )
 
-    full_tools_list = build_full_tools_list(send_msg, build_sub_agent)
+    full_tools_list = build_full_tools_list(build_sub_agent)
 
     agent: ReActAgent = ReActAgent(
         "ReActAgent",
