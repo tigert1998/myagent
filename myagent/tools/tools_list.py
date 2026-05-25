@@ -19,22 +19,22 @@ class ToolsList:
 
         raise ValueError(f'Invalid tool name "{name}"')
 
-    def execute_tool(self, name: str, args: dict[str, Any]) -> ToolResult:
+    def execute_tool(self, tool: str, args: dict[str, Any]) -> ToolResult:
         tool_found: bool = False
-        for tool in self.tools:
-            if name == tool.name:
+        for t in self.tools:
+            if tool == t.name:
                 tool_found = True
-                result = tool.invoke(**args)
+                result = t.invoke(**args)
                 for_agent = result.for_agent
                 for_user = result.for_user
                 break
 
         if not tool_found:
-            raise ValueError(f'Invalid tool name "{name}"')
+            raise ValueError(f'Invalid tool name "{tool}"')
 
         additional_output: list[str] = []
-        for tool in self.tools:
-            inject = tool.inject()
+        for t in self.tools:
+            inject = t.inject()
             if inject is not None:
                 additional_output.append(inject)
 

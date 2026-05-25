@@ -1,6 +1,7 @@
 import traceback
 from typing import Any, Optional, Callable
 import threading
+import json
 
 from myagent.loggers import Logger
 from myagent.tools.tools_list import ToolsList
@@ -103,11 +104,12 @@ class ReActAgent(Agent):
                 args = self.tools_list.parse_args(
                     name, tool_call["function"]["arguments"]
                 ).model_dump()
-                self.logger.log(
-                    self.name,
-                    {"action": {"tool": name, "args": args}},
+                tool_use_obj = {"tool": name, "args": args}
+                self.logger.log(self.name, {"action": tool_use_obj})
+                self.send_msg(
+                    f"TOOL USE:\n```json\n{json.dumps(tool_use_obj,indent=4,ensure_ascii=False)}\n```\n"
                 )
-                result = self.tools_list.execute_tool(name, args)
+                result = self.tools_list.execute_tool(**tool_use_obj)
                 observation = result.for_agent
                 msg_to_send = result.for_user
             except:
