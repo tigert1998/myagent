@@ -6,6 +6,7 @@ import signal
 from pydantic import BaseModel
 import frontmatter
 
+from myagent.utils import shorten
 from myagent.tools.tool import json_md, Tool, ToolResult
 
 
@@ -39,7 +40,8 @@ class ReadFileTool(Tool):
                         for i, line in enumerate(lines)
                     ]
                 )
-                + "\n```\n"
+                + "\n```\n",
+                f'Succeed to read "{path}".',
             )
 
 
@@ -57,7 +59,7 @@ class WriteFileTool(Tool):
     def invoke(self, path: str, content: str) -> ToolResult:
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
-        return ToolResult(json_md({"success": True}))
+        return ToolResult(json_md({"success": True}), f'Succeed to write "{path}".')
 
 
 class EditFileTool(Tool):
@@ -92,7 +94,8 @@ class EditFileTool(Tool):
                         "num_matches": num_matches,
                         "num_replaces": 0,
                     }
-                )
+                ),
+                f'Failed to edit "{path}": found {num_matches} matches.',
             )
 
         content = content.replace(old_str, new_str)
@@ -105,7 +108,8 @@ class EditFileTool(Tool):
                     "num_matches": num_matches,
                     "num_replaces": num_matches,
                 }
-            )
+            ),
+            f'Succeed to edit "{path}".',
         )
 
 
@@ -119,6 +123,22 @@ class BashTool(Tool):
     class Parameters(BaseModel):
         cmd: str
         timeout: float = 10
+
+    def _return_for_user(self, stdout, stderr, returncode, comment):
+        def preview(title, content, width):
+            if len(content) <= width:
+                header = f"--- {title} (All {len(content)} chars) ---"
+            else:
+                header = f"--- {title} (First {width} of {len(content)} chars) ---"
+            content_display = shorten(content, width)
+            return header + "\n" + content_display + "\n\n"
+
+        return (
+            f"Execution finished with code {returncode}.\n"
+            + (f"Comment: {comment}\n\n" if comment is not None else "\n")
+            + preview("STDOUT", stdout, 512)
+            + preview("STDERR", stderr, 512)
+        )
 
     def invoke(self, cmd: str, timeout: float) -> ToolResult:
         p: subprocess.Popen[str] = subprocess.Popen(
@@ -150,7 +170,8 @@ class BashTool(Tool):
                     "returncode": p.returncode,
                     "comment": comment,
                 }
-            )
+            ),
+            self._return_for_user(stdout, stderr, p.returncode, comment),
         )
 
 
@@ -205,4 +226,4 @@ class LoadSkillTool(Tool):
         with open(skill_md_path, "r") as f:
             md: frontmatter.Post = frontmatter.load(f)
         content: str = _skill_doc_inject_envs(md.content, folder)
-        return ToolResult(content)
+        return ToolResult(content, f'Succeed to load skill "{skill_name}".')

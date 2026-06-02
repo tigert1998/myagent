@@ -3,6 +3,7 @@ from typing import Any, Optional, Callable
 import threading
 import json
 
+from myagent.utils import shorten
 from myagent.loggers import Logger
 from myagent.tools.tools_list import ToolsList
 from myagent.llm_client import LLMClient
@@ -106,9 +107,10 @@ class ReActAgent(Agent):
                 ).model_dump()
                 tool_use_obj = {"tool": name, "args": args}
                 self.logger.log(self.name, {"action": tool_use_obj})
-                self.send_msg(
-                    f"TOOL USE:\n```json\n{json.dumps(tool_use_obj,indent=4,ensure_ascii=False)}\n```\n"
+                tool_use_obj_str = shorten(
+                    json.dumps(tool_use_obj, indent=4, ensure_ascii=False), 1024
                 )
+                self.send_msg(f"\n## TOOL USE\n```json\n{tool_use_obj_str}\n```\n")
                 result = self.tools_list.execute_tool(**tool_use_obj)
                 observation = result.for_agent
                 msg_to_send = result.for_user
@@ -120,7 +122,7 @@ class ReActAgent(Agent):
                 {"role": "tool", "tool_call_id": call_id, "content": observation}
             )
             if msg_to_send is not None:
-                self.send_msg(msg_to_send)
+                self.send_msg(f"\n## TOOL USE RESULT\n```\n{msg_to_send}\n```\n")
 
         self._clear_user_new_msgs(len(user_new_msgs))
         if len(tool_calls) > 0:

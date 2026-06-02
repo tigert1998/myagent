@@ -35,7 +35,8 @@ MyAgent 是一个基于 Python 的智能体（Agent）框架，支持多种推�
         },
         "discord": {
             "token": "你的 Discord 机器人 Token",
-            "log": "logs"
+            "log": "logs",
+            "proxy": "你的代理地址"
         }
     }
 }
