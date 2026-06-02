@@ -6,7 +6,7 @@ import traceback
 import os.path as osp
 from time import time
 from concurrent.futures import Future
-from typing import Any
+from typing import Any, Optional
 
 import discord
 
@@ -42,7 +42,13 @@ class DiscordChannel:
                     )
                 )
 
-    def __init__(self, llm_config: dict[str, Any], token: str, log_path: str) -> None:
+    def __init__(
+        self,
+        llm_config: dict[str, Any],
+        token: str,
+        log_path: str,
+        proxy: Optional[str],
+    ) -> None:
         self.llm_client: LLMClient = LLMClient.build(llm_config)
         self.token: str = token
         self.log_path: str = log_path
@@ -51,7 +57,7 @@ class DiscordChannel:
 
         intents: discord.Intents = discord.Intents.default()
         intents.message_content = True
-        self.client: discord.Client = discord.Client(intents=intents)
+        self.client: discord.Client = discord.Client(intents=intents, proxy=proxy)
         self.client.event(self.on_message)
 
     def send_msg(
@@ -169,5 +175,6 @@ if __name__ == "__main__":
         config["llm"],
         config["channels"]["discord"]["token"],
         config["channels"]["discord"]["log"],
+        config["channels"]["discord"].get("proxy"),
     )
     discord_channel.run()

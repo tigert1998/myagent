@@ -181,6 +181,8 @@ class LoadSkillTool(Tool):
     def list_of_skills(self) -> str:
         ls: list[str] = []
         folder: str = osp.expanduser("~/.agents/skills")
+        if not osp.isdir(folder):
+            return ""
         skills: list[str] = os.listdir(folder)
         for skill in skills:
             skill_md_path: str = osp.join(folder, skill, "SKILL.md")
