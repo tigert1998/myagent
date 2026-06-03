@@ -1,7 +1,7 @@
 FROM ubuntu:24.04
 
 RUN apt update && apt upgrade -y && apt install -y \
-    vim curl language-pack-zh-hans git g++ iputils-ping
+    vim curl language-pack-zh-hans git g++ iputils-ping netcat-openbsd zip unzip
 
 RUN printf "export LANG=zh_CN.UTF-8\nexport LANGUAGE=zh_CN:zh\n" >> /etc/profile
 
