@@ -22,6 +22,7 @@ class Agent:
         self.llm_client: LLMClient = llm_client
         self.send_msg = send_msg
         self.tools_list: ToolsList = tools_list
+
         self.usage: LLMUsage = LLMUsage()
         self.report_usage_every_n_tokens = 1 << 14
         self.report_usage_limit = self.report_usage_every_n_tokens
@@ -53,6 +54,8 @@ class ReActAgent(Agent):
 
         self.user_new_msgs_lock = threading.Lock()
         self.user_new_msgs: list[str] = []
+
+        self.round_index = 0
 
     def append_user_new_msg(self, message: str) -> None:
         with self.user_new_msgs_lock:
@@ -119,14 +122,18 @@ class ReActAgent(Agent):
             try:
                 args = self.tools_list.parse_args(
                     name, tool_call["function"]["arguments"]
-                ).model_dump()
+                )
                 tool_use_obj = {"tool": name, "args": args}
                 self.logger.log(self.name, {"action": tool_use_obj})
                 tool_use_obj_str = shorten(
                     json.dumps(tool_use_obj, indent=4, ensure_ascii=False), 1024
                 )
                 self.send_msg(f"## TOOL USE\n```json\n{tool_use_obj_str}\n```\n")
-                result = self.tools_list.execute_tool(**tool_use_obj)
+                result = self.tools_list.execute_tool(
+                    tool=name,
+                    args=args,
+                    agent_env={"usage": self.usage, "round_index": self.round_index},
+                )
                 observation = result.for_agent
                 msg_to_send = result.for_user
             except:
@@ -154,7 +161,9 @@ class ReActAgent(Agent):
     ) -> tuple[list[dict[str, Any]], Optional[str]]:
         for _ in range(self.num_retries + 1):
             try:
-                return self._try_one_iter(messages)
+                ret = self._try_one_iter(messages)
+                self.round_index += 1
+                return ret
             except Exception as e:
                 exception = e
         raise exception

@@ -125,7 +125,7 @@ class BashTool(Tool):
         cmd: str
         timeout: float = 10
 
-    def _return_for_user(
+    def _message_for_user(
         self, stdout: str, stderr: str, returncode: int, comment: Optional[str]
     ) -> str:
         def preview(title: str, content: str, width: int) -> str:
@@ -174,7 +174,7 @@ class BashTool(Tool):
                     "comment": comment,
                 }
             ),
-            self._return_for_user(stdout, stderr, p.returncode, comment),
+            self._message_for_user(stdout, stderr, p.returncode, comment),
         )
 
 

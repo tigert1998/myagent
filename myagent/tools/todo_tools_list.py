@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Literal, Optional, Any
 
 from myagent.tools.tool import Tool, json_md, ToolResult
 from myagent.tools.tools_list import ToolsList
@@ -24,12 +24,12 @@ class PlanItem:
 
 class PlanningState:
     items: list[PlanItem]
-    rounds_since_update: int
+    last_update_round_index: Optional[int]
     reminder_rounds: int
 
     def __init__(self) -> None:
         self.items = []
-        self.rounds_since_update = 1
+        self.last_update_round_index = None
         self.reminder_rounds = 5
 
     def update(self, todo_items: list[dict[str, str]]) -> None:
@@ -124,23 +124,25 @@ class WriteTODOTool(TODOTool):
 
     def invoke(self, todo_items: list[dict[str, str]]) -> ToolResult:
         self.planning_state.update(todo_items)
-        self.planning_state.rounds_since_update = 0
+        self.planning_state.last_update_round_index = self.agent_env["round_index"]
         return ToolResult(json_md({"success": True}), self.render_for_user())
 
     def inject(self) -> Optional[str]:
-        if (
-            self.planning_state.rounds_since_update
-            >= self.planning_state.reminder_rounds
-        ):
-            if len(self.planning_state.items) == 0:
-                output = f"REMINDER: You have not created a todo list yet. Create one with `{self.name}` tool if your task is complicated or involves multiple steps."
-            else:
-                output = f"REMINDER: There are {self.planning_state.rounds_since_update} rounds since last plan update. Update your plan with `{self.name}` tool ASAP."
-        else:
-            output = None
+        if self.planning_state.last_update_round_index is None:
+            return f"REMINDER: You have not created a todo list yet. Create one with `{self.name}` tool if your task is complicated or involves multiple steps."
 
-        self.planning_state.rounds_since_update += 1
-        return output
+        if (
+            self.planning_state.last_update_round_index
+            + self.planning_state.reminder_rounds
+            <= self.agent_env["round_index"]
+        ):
+            delta = (
+                self.agent_env["round_index"]
+                - self.planning_state.last_update_round_index
+            )
+            return f"REMINDER: There are {delta} rounds since last plan update. Update your plan with `{self.name}` tool ASAP."
+
+        return None
 
 
 class TODOToolsList(ToolsList):

@@ -22,6 +22,9 @@ class Tool:
 
     class Parameters(BaseModel): ...
 
+    def update_agent_env(self, agent_env: dict[str, Any]) -> None:
+        self.agent_env = agent_env
+
     def invoke(self, *args: Any, **kwargs: Any) -> ToolResult:
         raise NotImplementedError()
 
