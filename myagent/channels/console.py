@@ -14,7 +14,7 @@ from myagent.loggers import JsonlLogger, TerminalPrompter
 
 
 def send_msg(content: str) -> None:
-    TerminalPrompter.instance().prompt_notify("MyAgent", content)
+    TerminalPrompter.instance().prompt_notify("MyAgent", "\n" + content)
 
 
 def request_msg() -> str:

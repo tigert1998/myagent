@@ -23,6 +23,17 @@ class Agent:
         self.send_msg = send_msg
         self.tools_list: ToolsList = tools_list
         self.usage: LLMUsage = LLMUsage()
+        self.report_usage_every_n_tokens = 1 << 14
+        self.report_usage_limit = self.report_usage_every_n_tokens
+
+    def try_report_usage(self):
+        if self.usage.prompt_tokens >= self.report_usage_limit:
+            self.send_msg(self.usage.report())
+            self.report_usage_limit = (
+                (self.usage.prompt_tokens + self.report_usage_every_n_tokens - 1)
+                // self.report_usage_every_n_tokens
+                * self.report_usage_every_n_tokens
+            )
 
 
 class ReActAgent(Agent):
@@ -83,6 +94,7 @@ class ReActAgent(Agent):
         self.logger.log(self.name, {"assistant": content})
         if len(content) > 0:
             self.send_msg(content)
+        self.try_report_usage()
 
         messages_to_append: list[dict[str, Any]] = [
             {
@@ -114,7 +126,7 @@ class ReActAgent(Agent):
                 tool_use_obj_str = shorten(
                     json.dumps(tool_use_obj, indent=4, ensure_ascii=False), 1024
                 )
-                self.send_msg(f"\n## TOOL USE\n```json\n{tool_use_obj_str}\n```\n")
+                self.send_msg(f"## TOOL USE\n```json\n{tool_use_obj_str}\n```\n")
                 result = self.tools_list.execute_tool(**tool_use_obj)
                 observation = result.for_agent
                 msg_to_send = result.for_user
@@ -126,7 +138,7 @@ class ReActAgent(Agent):
                 {"role": "tool", "tool_call_id": call_id, "content": observation}
             )
             if msg_to_send is not None:
-                self.send_msg(f"\n## TOOL USE RESULT\n```\n{msg_to_send}\n```\n")
+                self.send_msg(f"## TOOL USE RESULT\n```\n{msg_to_send}\n```\n")
 
         self._clear_user_new_msgs(len(user_new_msgs))
         if len(tool_calls) > 0:

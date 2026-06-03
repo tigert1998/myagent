@@ -63,7 +63,7 @@ class DiscordChannel:
     def send_msg(
         self, channel: discord.TextChannel, user_id: int, content: str
     ) -> list[int]:
-        content = f"<@{user_id}> {content}"
+        content = f"<@{user_id}>\n{content}"
         message_ids = []
         while len(content) > 0:
             content_to_send = content[:1900]
