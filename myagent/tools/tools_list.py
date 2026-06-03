@@ -32,14 +32,10 @@ class ToolsList:
         if not tool_found:
             raise ValueError(f'Invalid tool name "{tool}"')
 
-        additional_output: list[str] = []
         for t in self.tools:
             inject = t.inject()
             if inject is not None:
-                additional_output.append(inject)
-
-        if len(additional_output) > 0:
-            for_agent = for_agent + "\n\n" + "\n\n".join(additional_output)
+                for_agent.append(inject)
 
         return ToolResult(for_agent, for_user)
 

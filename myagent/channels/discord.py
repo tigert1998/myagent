@@ -154,7 +154,7 @@ class DiscordChannel:
             except:
                 error_msg: str = traceback.format_exc()
                 error_msg = error_msg[-1900:]
-                send_msg(f"**MyAgent crashes:**\n```\n{error_msg}\n```\n")
+                send_msg(f"## MyAgent crashes\n```\n{error_msg}\n```\n")
             finally:
                 session.agents = []
 

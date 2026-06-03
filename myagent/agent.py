@@ -26,7 +26,7 @@ class Agent:
         self.report_usage_every_n_tokens = 1 << 14
         self.report_usage_limit = self.report_usage_every_n_tokens
 
-    def try_report_usage(self):
+    def try_report_usage(self) -> None:
         if self.usage.prompt_tokens >= self.report_usage_limit:
             self.send_msg(self.usage.report())
             self.report_usage_limit = (
@@ -75,12 +75,11 @@ class ReActAgent(Agent):
 
         user_new_msgs = self._get_user_new_msgs()
         if len(user_new_msgs) > 0:
-            user_new_msg = "\n".join(user_new_msgs)
-            self.logger.log(self.name, {"user": user_new_msg})
+            self.logger.log(self.name, {"user": user_new_msgs})
             messages = messages + [
                 {
                     "role": "user",
-                    "content": user_new_msg,
+                    "content": [{"type": "text", "text": s} for s in user_new_msgs],
                 }
             ]
 
@@ -131,11 +130,15 @@ class ReActAgent(Agent):
                 observation = result.for_agent
                 msg_to_send = result.for_user
             except:
-                observation = traceback.format_exc()
+                observation = [traceback.format_exc()]
                 msg_to_send = None
             self.logger.log(self.name, {"observation": observation})
             messages_to_append.append(
-                {"role": "tool", "tool_call_id": call_id, "content": observation}
+                {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": [{"type": "text", "text": s} for s in observation],
+                }
             )
             if msg_to_send is not None:
                 self.send_msg(f"## TOOL USE RESULT\n```\n{msg_to_send}\n```\n")
