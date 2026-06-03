@@ -5,7 +5,7 @@ import platform
 import os
 
 
-def load_prompt(path: str, args: dict[str, str]):
+def load_prompt(path: str, args: dict[str, str]) -> str:
     var_pattern = r"@\{MYAGENT:([^}]+)\}"
     file_pattern = r"@\{MYAGENT_FILE:([^}]+)\}"
 

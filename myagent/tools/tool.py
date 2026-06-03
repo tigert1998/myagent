@@ -19,7 +19,7 @@ class Tool:
 
     class Parameters(BaseModel): ...
 
-    def invoke(self, *args, **kwargs) -> ToolResult:
+    def invoke(self, *args: Any, **kwargs: Any) -> ToolResult:
         raise NotImplementedError()
 
     def inject(self) -> Optional[str]:

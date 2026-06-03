@@ -6,7 +6,7 @@ import json
 from myagent.utils import shorten
 from myagent.loggers import Logger
 from myagent.tools.tools_list import ToolsList
-from myagent.llm_client import LLMClient
+from myagent.llm_client import LLMClient, LLMUsage
 from myagent.prompt import load_prompt
 
 
@@ -22,6 +22,7 @@ class Agent:
         self.llm_client: LLMClient = llm_client
         self.send_msg = send_msg
         self.tools_list: ToolsList = tools_list
+        self.usage: LLMUsage = LLMUsage()
 
 
 class ReActAgent(Agent):
@@ -42,7 +43,7 @@ class ReActAgent(Agent):
         self.user_new_msgs_lock = threading.Lock()
         self.user_new_msgs: list[str] = []
 
-    def append_user_new_msg(self, message):
+    def append_user_new_msg(self, message: str) -> None:
         with self.user_new_msgs_lock:
             self.user_new_msgs.append(message)
 
@@ -50,7 +51,7 @@ class ReActAgent(Agent):
         with self.user_new_msgs_lock:
             return self.user_new_msgs.copy()
 
-    def _clear_user_new_msgs(self, length: int):
+    def _clear_user_new_msgs(self, length: int) -> None:
         with self.user_new_msgs_lock:
             self.user_new_msgs = self.user_new_msgs[length:]
 
@@ -72,9 +73,12 @@ class ReActAgent(Agent):
                 }
             ]
 
-        reasoning_content, content, tool_calls = self.llm_client.call(
-            messages, self.tools_list.schema()
-        )
+        response = self.llm_client.call(messages, self.tools_list.schema())
+        reasoning_content = response.reasoning_content
+        content = response.content
+        tool_calls = response.tool_calls
+        self.usage.add(response.usage)
+
         self.logger.log(self.name, {"think": reasoning_content})
         self.logger.log(self.name, {"assistant": content})
         if len(content) > 0:

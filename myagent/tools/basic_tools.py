@@ -2,6 +2,7 @@ import os
 import os.path as osp
 import subprocess
 import signal
+from typing import Optional
 
 from pydantic import BaseModel
 import frontmatter
@@ -124,8 +125,10 @@ class BashTool(Tool):
         cmd: str
         timeout: float = 10
 
-    def _return_for_user(self, stdout, stderr, returncode, comment):
-        def preview(title, content, width):
+    def _return_for_user(
+        self, stdout: str, stderr: str, returncode: int, comment: Optional[str]
+    ) -> str:
+        def preview(title: str, content: str, width: int) -> str:
             if len(content) <= width:
                 header = f"--- {title} (All {len(content)} chars) ---"
             else:

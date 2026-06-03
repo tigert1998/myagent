@@ -12,7 +12,7 @@ class ToolsList:
     def schema(self) -> list[dict[str, Any]]:
         return [t.schema() for t in self.tools]
 
-    def parse_args(self, name: str, args: str):
+    def parse_args(self, name: str, args: str) -> Any:
         for tool in self.tools:
             if name == tool.name:
                 return tool.Parameters.model_validate_json(args)
