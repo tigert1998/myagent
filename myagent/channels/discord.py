@@ -13,10 +13,7 @@ import discord
 from myagent.agent import ReActAgent
 from myagent.llm_client import LLMClient
 from myagent.loggers import JsonlLogger
-from myagent.tools.build_tools_lists import (
-    build_basic_tools_list,
-    build_full_tools_list,
-)
+from myagent.tools.build_tools_lists import build_basic_tools_list
 
 
 class DiscordChannel:
@@ -112,33 +109,11 @@ class DiscordChannel:
                     osp.join(self.log_path, f"{message.author.id}-{time():.3f}.jsonl")
                 )
 
-                num_sub_agents = 0
-
-                def build_sub_agent() -> ReActAgent:
-                    nonlocal num_sub_agents
-                    num_sub_agents += 1
-                    sub_agent = ReActAgent(
-                        f"SubAgent #{num_sub_agents}",
-                        self.llm_client,
-                        send_msg,
-                        build_basic_tools_list(),
-                        logger,
-                    )
-                    session.agents.append(sub_agent)
-                    return sub_agent
-
-                def destroy_sub_agent(sub_agent: ReActAgent) -> None:
-                    session.agents.remove(sub_agent)
-
-                full_tools_list = build_full_tools_list(
-                    build_sub_agent, destroy_sub_agent
-                )
-
                 agent: ReActAgent = ReActAgent(
                     "ReActAgent",
                     self.llm_client,
                     send_msg,
-                    full_tools_list,
+                    build_basic_tools_list(),
                     logger,
                 )
 

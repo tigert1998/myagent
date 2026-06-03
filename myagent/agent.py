@@ -135,8 +135,9 @@ class ReActAgent(Agent):
                 observation = result.for_agent
                 msg_to_send = result.for_user
             except:
-                observation = [traceback.format_exc()]
-                msg_to_send = None
+                exc_str = traceback.format_exc()
+                observation = [exc_str]
+                msg_to_send = exc_str
             self.logger.log(self.name, {"observation": observation})
             messages_to_append.append(
                 {
