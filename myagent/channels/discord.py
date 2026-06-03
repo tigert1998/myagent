@@ -24,17 +24,17 @@ class DiscordChannel:
         agents: list[ReActAgent]
         condition: threading.Condition
 
-        def __init__(self):
+        def __init__(self) -> None:
             self.agents = []
             self.condition = threading.Condition()
 
-        def append_user_new_msg(self, message: str):
+        def append_user_new_msg(self, message: str) -> None:
             with self.condition:
                 for agent in self.agents:
                     agent.append_user_new_msg(message)
                 self.condition.notify_all()
 
-        def wait_for_user_new_msgs(self):
+        def wait_for_user_new_msgs(self) -> None:
             with self.condition:
                 self.condition.wait_for(
                     lambda: any(
@@ -63,7 +63,7 @@ class DiscordChannel:
     def send_msg(
         self, channel: discord.TextChannel, user_id: int, content: str
     ) -> list[int]:
-        content = f"<@{user_id}> {content}"
+        content = f"<@{user_id}>\n{content}"
         message_ids = []
         while len(content) > 0:
             content_to_send = content[:1900]
@@ -100,7 +100,7 @@ class DiscordChannel:
             session = DiscordChannel.Session()
             self.messages_to_session[message.id] = session
 
-            def send_msg(content: str):
+            def send_msg(content: str) -> None:
                 message_ids = self.send_msg(
                     channel=channel, user_id=message.author.id, content=content
                 )
@@ -115,7 +115,7 @@ class DiscordChannel:
 
                 num_sub_agents = 0
 
-                def build_sub_agent():
+                def build_sub_agent() -> ReActAgent:
                     nonlocal num_sub_agents
                     num_sub_agents += 1
                     sub_agent = ReActAgent(
@@ -128,7 +128,7 @@ class DiscordChannel:
                     session.agents.append(sub_agent)
                     return sub_agent
 
-                def destroy_sub_agent(sub_agent: ReActAgent):
+                def destroy_sub_agent(sub_agent: ReActAgent) -> None:
                     session.agents.remove(sub_agent)
 
                 full_tools_list = build_full_tools_list(
@@ -154,7 +154,7 @@ class DiscordChannel:
             except:
                 error_msg: str = traceback.format_exc()
                 error_msg = error_msg[-1900:]
-                send_msg(f"**MyAgent crashes:**\n```\n{error_msg}\n```\n")
+                send_msg(f"## MyAgent crashes\n```\n{error_msg}\n```\n")
             finally:
                 session.agents = []
 

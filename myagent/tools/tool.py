@@ -5,11 +5,14 @@ from pydantic import BaseModel
 
 
 class ToolResult:
-    for_agent: str
+    for_agent: list[str]
     for_user: Optional[str]
 
-    def __init__(self, for_agent: str, for_user: Optional[str] = None):
-        self.for_agent = for_agent
+    def __init__(self, for_agent: str | list[str], for_user: Optional[str] = None):
+        if isinstance(for_agent, str):
+            self.for_agent = [for_agent]
+        else:
+            self.for_agent = for_agent
         self.for_user = for_user
 
 
@@ -19,7 +22,7 @@ class Tool:
 
     class Parameters(BaseModel): ...
 
-    def invoke(self, *args, **kwargs) -> ToolResult:
+    def invoke(self, *args: Any, **kwargs: Any) -> ToolResult:
         raise NotImplementedError()
 
     def inject(self) -> Optional[str]:

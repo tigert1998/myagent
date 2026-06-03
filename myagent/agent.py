@@ -6,7 +6,7 @@ import json
 from myagent.utils import shorten
 from myagent.loggers import Logger
 from myagent.tools.tools_list import ToolsList
-from myagent.llm_client import LLMClient
+from myagent.llm_client import LLMClient, LLMUsage
 from myagent.prompt import load_prompt
 
 
@@ -22,6 +22,18 @@ class Agent:
         self.llm_client: LLMClient = llm_client
         self.send_msg = send_msg
         self.tools_list: ToolsList = tools_list
+        self.usage: LLMUsage = LLMUsage()
+        self.report_usage_every_n_tokens = 1 << 14
+        self.report_usage_limit = self.report_usage_every_n_tokens
+
+    def try_report_usage(self) -> None:
+        if self.usage.prompt_tokens >= self.report_usage_limit:
+            self.send_msg(self.usage.report())
+            self.report_usage_limit = (
+                (self.usage.prompt_tokens + self.report_usage_every_n_tokens - 1)
+                // self.report_usage_every_n_tokens
+                * self.report_usage_every_n_tokens
+            )
 
 
 class ReActAgent(Agent):
@@ -42,7 +54,7 @@ class ReActAgent(Agent):
         self.user_new_msgs_lock = threading.Lock()
         self.user_new_msgs: list[str] = []
 
-    def append_user_new_msg(self, message):
+    def append_user_new_msg(self, message: str) -> None:
         with self.user_new_msgs_lock:
             self.user_new_msgs.append(message)
 
@@ -50,7 +62,7 @@ class ReActAgent(Agent):
         with self.user_new_msgs_lock:
             return self.user_new_msgs.copy()
 
-    def _clear_user_new_msgs(self, length: int):
+    def _clear_user_new_msgs(self, length: int) -> None:
         with self.user_new_msgs_lock:
             self.user_new_msgs = self.user_new_msgs[length:]
 
@@ -63,22 +75,25 @@ class ReActAgent(Agent):
 
         user_new_msgs = self._get_user_new_msgs()
         if len(user_new_msgs) > 0:
-            user_new_msg = "\n".join(user_new_msgs)
-            self.logger.log(self.name, {"user": user_new_msg})
+            self.logger.log(self.name, {"user": user_new_msgs})
             messages = messages + [
                 {
                     "role": "user",
-                    "content": user_new_msg,
+                    "content": [{"type": "text", "text": s} for s in user_new_msgs],
                 }
             ]
 
-        reasoning_content, content, tool_calls = self.llm_client.call(
-            messages, self.tools_list.schema()
-        )
+        response = self.llm_client.call(messages, self.tools_list.schema())
+        reasoning_content = response.reasoning_content
+        content = response.content
+        tool_calls = response.tool_calls
+        self.usage.add(response.usage)
+
         self.logger.log(self.name, {"think": reasoning_content})
         self.logger.log(self.name, {"assistant": content})
         if len(content) > 0:
             self.send_msg(content)
+        self.try_report_usage()
 
         messages_to_append: list[dict[str, Any]] = [
             {
@@ -110,19 +125,23 @@ class ReActAgent(Agent):
                 tool_use_obj_str = shorten(
                     json.dumps(tool_use_obj, indent=4, ensure_ascii=False), 1024
                 )
-                self.send_msg(f"\n## TOOL USE\n```json\n{tool_use_obj_str}\n```\n")
+                self.send_msg(f"## TOOL USE\n```json\n{tool_use_obj_str}\n```\n")
                 result = self.tools_list.execute_tool(**tool_use_obj)
                 observation = result.for_agent
                 msg_to_send = result.for_user
             except:
-                observation = traceback.format_exc()
+                observation = [traceback.format_exc()]
                 msg_to_send = None
             self.logger.log(self.name, {"observation": observation})
             messages_to_append.append(
-                {"role": "tool", "tool_call_id": call_id, "content": observation}
+                {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": [{"type": "text", "text": s} for s in observation],
+                }
             )
             if msg_to_send is not None:
-                self.send_msg(f"\n## TOOL USE RESULT\n```\n{msg_to_send}\n```\n")
+                self.send_msg(f"## TOOL USE RESULT\n```\n{msg_to_send}\n```\n")
 
         self._clear_user_new_msgs(len(user_new_msgs))
         if len(tool_calls) > 0:

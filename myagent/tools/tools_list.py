@@ -12,7 +12,7 @@ class ToolsList:
     def schema(self) -> list[dict[str, Any]]:
         return [t.schema() for t in self.tools]
 
-    def parse_args(self, name: str, args: str):
+    def parse_args(self, name: str, args: str) -> Any:
         for tool in self.tools:
             if name == tool.name:
                 return tool.Parameters.model_validate_json(args)
@@ -32,14 +32,10 @@ class ToolsList:
         if not tool_found:
             raise ValueError(f'Invalid tool name "{tool}"')
 
-        additional_output: list[str] = []
         for t in self.tools:
             inject = t.inject()
             if inject is not None:
-                additional_output.append(inject)
-
-        if len(additional_output) > 0:
-            for_agent = for_agent + "\n\n" + "\n\n".join(additional_output)
+                for_agent.append(inject)
 
         return ToolResult(for_agent, for_user)
 
