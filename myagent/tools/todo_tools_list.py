@@ -30,7 +30,7 @@ class PlanningState:
     def __init__(self) -> None:
         self.items = []
         self.last_update_round_index = None
-        self.reminder_rounds = 5
+        self.reminder_rounds = 32
 
     def update(self, todo_items: list[dict[str, str]]) -> None:
         self.items = [
@@ -43,16 +43,22 @@ class PlanningState:
             raise e
 
     def check(self) -> None:
-        if len(self.items) == 0:
-            return
         count_in_progress: int = 0
+        count_completed: int = 0
+        count_pending: int = 0
         for i in self.items:
             if i.status == "in_progress":
                 count_in_progress += 1
-        if count_in_progress != 1:
-            raise ValueError(
-                f"There are {count_in_progress} TODO items in progress. Only one is allowed."
-            )
+            elif i.status == "completed":
+                count_completed += 1
+            elif i.status == "pending":
+                count_pending += 1
+        if count_in_progress == 1 or count_completed == len(self.items):
+            return
+        raise ValueError(
+            f"Invalid TODO state: expected either exactly one item in progress or all items completed. "
+            f"Current status: {count_in_progress} in progress, {count_completed} completed, {count_pending} pending."
+        )
 
 
 class TODOTool(Tool):
