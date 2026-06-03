@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING, Callable, Optional
+import copy
 
 from pydantic import BaseModel, Field
 
@@ -18,11 +19,11 @@ class SpawnSubAgentTool(Tool):
 
     class Parameters(BaseModel):
         query: str = Field(
-            description="A complete and self-contained description of the sub-task. "
-            "It MUST include:\n"
-            "1) All necessary background information and context;\n"
-            "2) The specific goal or deliverable expected from the sub-agent.\n"
-            "Do NOT assume the sub-agent shares any memory or history with the main agent."
+            description=(
+                "The specific sub-goal or self-contained task to be executed by the sub-agent. "
+                "The sub-agent must fully commit to this objective and exhaust all available steps "
+                "to produce a complete and final answer."
+            ),
         )
 
     def __init__(
@@ -47,7 +48,9 @@ class SpawnSubAgentTool(Tool):
         sub_agent = self.build_sub_agent()
 
         sub_agent.append_user_new_msg(query)
-        _, final_answer = sub_agent.run()
+        _, final_answer = sub_agent.run(
+            prev_messages=copy.deepcopy(self.agent_env["messages"])
+        )
 
         if self.destroy_sub_agent is not None:
             self.destroy_sub_agent(sub_agent)

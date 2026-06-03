@@ -1,4 +1,4 @@
-from typing import Literal, Optional, Any
+from typing import Literal, Optional
 
 from myagent.tools.tool import Tool, json_md, ToolResult
 from myagent.tools.tools_list import ToolsList
@@ -124,7 +124,7 @@ class WriteTODOTool(TODOTool):
 
     def invoke(self, todo_items: list[dict[str, str]]) -> ToolResult:
         self.planning_state.update(todo_items)
-        self.planning_state.last_update_round_index = self.agent_env["round_index"]
+        self.planning_state.last_update_round_index = len(self.agent_env["messages"])
         return ToolResult(json_md({"success": True}), self.render_for_user())
 
     def inject(self) -> Optional[str]:
@@ -134,10 +134,10 @@ class WriteTODOTool(TODOTool):
         if (
             self.planning_state.last_update_round_index
             + self.planning_state.reminder_rounds
-            <= self.agent_env["round_index"]
+            <= len(self.agent_env["messages"])
         ):
             delta = (
-                self.agent_env["round_index"]
+                len(self.agent_env["messages"])
                 - self.planning_state.last_update_round_index
             )
             return f"REMINDER: There are {delta} rounds since last plan update. Update your plan with `{self.name}` tool ASAP."

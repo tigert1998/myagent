@@ -16,11 +16,6 @@ class LLMUsage:
     def prompt_tokens(self) -> int:
         return self.prompt_cache_hit_tokens + self.prompt_cache_miss_tokens
 
-    def add(self, usage: LLMUsage) -> None:
-        self.completion_tokens += usage.completion_tokens
-        self.prompt_cache_hit_tokens += usage.prompt_cache_hit_tokens
-        self.prompt_cache_miss_tokens += usage.prompt_cache_miss_tokens
-
     def report(self) -> str:
         return "\n".join(
             [
