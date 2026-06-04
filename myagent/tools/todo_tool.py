@@ -1,7 +1,6 @@
 from typing import Literal, Optional
 
-from myagent.tools.tool import Tool, json_md, ToolResult
-from myagent.tools.tools_list import ToolsList
+from myagent.tools.tool import json_md, ToolResult, Tool
 
 from pydantic import BaseModel
 
@@ -61,50 +60,7 @@ class PlanningState:
         )
 
 
-class TODOTool(Tool):
-    planning_state: PlanningState
-
-    def __init__(self, planning_state: PlanningState) -> None:
-        self.planning_state: PlanningState = planning_state
-
-    def render_for_agent(self) -> str:
-        lines: list[str] = []
-        for i, item in enumerate(self.planning_state.items):
-            lines.append(f"- [Plan Item #{i + 1}: {item.status}] {item.content}")
-        return "\n".join(lines) + "\n"
-
-    def render_for_user(self) -> str:
-        renders: list[str] = []
-        for i in self.planning_state.items:
-            if i.status == "pending":
-                s: str = " "
-            elif i.status == "in_progress":
-                s = ">"
-            elif i.status == "completed":
-                s = "x"
-            renders.append(f"[{s}] {i.content}")
-        return "\n".join(renders)
-
-
-class ReadTODOTool(TODOTool):
-    name: str = "read_todo"
-
-    desc: str = (
-        "Reads the current state of the TODO list. "
-        "Use this tool to check the status of tasks, see what has been completed, "
-        "and decide the next steps. This tool does not modify the list."
-    )
-
-    class Parameters(BaseModel): ...
-
-    def __init__(self, planning_state: PlanningState) -> None:
-        super().__init__(planning_state)
-
-    def invoke(self) -> ToolResult:
-        return ToolResult(self.render_for_agent())
-
-
-class WriteTODOTool(TODOTool):
+class WriteTODOTool(Tool):
     name: str = "write_todo"
 
     desc: str = (
@@ -125,8 +81,26 @@ class WriteTODOTool(TODOTool):
 
         todo_items: list[Item]
 
-    def __init__(self, planning_state: PlanningState) -> None:
-        super().__init__(planning_state)
+    def __init__(self) -> None:
+        self.planning_state: PlanningState = PlanningState()
+
+    def render_for_agent(self) -> str:
+        lines: list[str] = []
+        for item in self.planning_state.items:
+            lines.append(f"- [{item.status}] {item.content}")
+        return "\n".join(lines) + "\n"
+
+    def render_for_user(self) -> str:
+        renders: list[str] = []
+        for i in self.planning_state.items:
+            if i.status == "pending":
+                s: str = " "
+            elif i.status == "in_progress":
+                s = ">"
+            elif i.status == "completed":
+                s = "x"
+            renders.append(f"[{s}] {i.content}")
+        return "\n".join(renders)
 
     def invoke(self, todo_items: list[dict[str, str]]) -> ToolResult:
         self.planning_state.update(todo_items)
@@ -137,6 +111,8 @@ class WriteTODOTool(TODOTool):
         if self.planning_state.last_update_index is None:
             return f"REMINDER: You have not created a todo list yet. Create one with `{self.name}` tool if your task is complicated or involves multiple steps."
 
+        output = "## TODO LIST\n" + self.render_for_agent()
+
         messages = self.agent_env["messages"]
         delta = len(
             [
@@ -146,17 +122,6 @@ class WriteTODOTool(TODOTool):
             ]
         )
         if delta >= self.planning_state.reminder_rounds:
-            return f"REMINDER: There are {delta} rounds since last plan update. Update your plan with `{self.name}` tool ASAP."
+            output += f"REMINDER: There are {delta} rounds since last plan update. Update your plan with `{self.name}` tool ASAP."
 
-        return None
-
-
-class TODOToolsList(ToolsList):
-    def __init__(self) -> None:
-        planning_state = PlanningState()
-        super().__init__(
-            [
-                ReadTODOTool(planning_state),
-                WriteTODOTool(planning_state),
-            ]
-        )
+        return output
