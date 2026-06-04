@@ -48,9 +48,17 @@ class LLMClient:
 
     @staticmethod
     def build(config: dict[str, Any]) -> "LLMClient":
+        config = config["profiles"][config["choice"]]
         provider: str = config.get("provider", "")
         if provider == "deepseek":
             return DeepSeekClient(
+                config["url"],
+                config["model"],
+                config["key"],
+                config.get("other_configs", {}),
+            )
+        elif provider == "xiaomimimo":
+            return XiaomiMIMOClient(
                 config["url"],
                 config["model"],
                 config["key"],
@@ -97,4 +105,55 @@ class DeepSeekClient(LLMClient):
         output.usage.completion_tokens = usage["completion_tokens"]
         output.usage.prompt_cache_hit_tokens = usage["prompt_cache_hit_tokens"]
         output.usage.prompt_cache_miss_tokens = usage["prompt_cache_miss_tokens"]
+        return output
+
+
+class XiaomiMIMOClient(LLMClient):
+    def __init__(
+        self, url: str, model: str, key: str, other_configs: dict[str, Any]
+    ) -> None:
+        self.url: str = url
+        self.model: str = model
+        self.key: str = key
+        self.other_configs: dict[str, Any] = other_configs
+
+    def call(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+    ) -> LLMResponse:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            "tools": tools,
+            **self.other_configs,
+        }
+        headers: dict[str, str] = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.key}",
+        }
+        response: requests.Response = requests.post(
+            url=self.url, headers=headers, json=payload
+        )
+        response.raise_for_status()
+        response_data: dict[str, Any] = response.json()
+        message: dict[str, Any] = response_data["choices"][0]["message"]
+        usage: dict[str, Any] = response_data["usage"]
+
+        output = LLMResponse()
+        output.reasoning_content = message.get("reasoning_content", "")
+        if output.reasoning_content is None:
+            output.reasoning_content = ""
+        output.content = message.get("content", "")
+        if output.content is None:
+            output.content = ""
+        output.tool_calls = message.get("tool_calls", [])
+        if output.tool_calls is None:
+            output.tool_calls = []
+        output.usage.completion_tokens = usage["completion_tokens"]
+        output.usage.prompt_cache_hit_tokens = usage["prompt_tokens_details"][
+            "cached_tokens"
+        ]
+        output.usage.prompt_cache_miss_tokens = (
+            usage["prompt_tokens"] - output.usage.prompt_cache_hit_tokens
+        )
         return output
