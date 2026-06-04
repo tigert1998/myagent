@@ -24,10 +24,15 @@ MyAgent 是一个基于 Python 的智能体（Agent）框架，支持多种推�
 ```json
 {
     "llm": {
-        "provider": "deepseek",
-        "key": "你的 API key",
-        "url": "https://api.deepseek.com/v1/chat/completions",
-        "model": "deepseek-v4-pro"
+        "choice": "dsv4pro",
+        "profiles": {
+            "dsv4pro": {
+                "provider": "deepseek",
+                "key": "你的 API key",
+                "url": "https://api.deepseek.com/v1/chat/completions",
+                "model": "deepseek-v4-pro"
+            }
+        }
     },
     "channels": {
         "console": {
