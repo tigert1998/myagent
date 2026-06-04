@@ -24,13 +24,13 @@ class PlanItem:
 
 class PlanningState:
     items: list[PlanItem]
-    rounds_since_update: int
+    last_update_round_index: Optional[int]
     reminder_rounds: int
 
     def __init__(self) -> None:
         self.items = []
-        self.rounds_since_update = 1
-        self.reminder_rounds = 5
+        self.last_update_round_index = None
+        self.reminder_rounds = 32
 
     def update(self, todo_items: list[dict[str, str]]) -> None:
         self.items = [
@@ -43,16 +43,22 @@ class PlanningState:
             raise e
 
     def check(self) -> None:
-        if len(self.items) == 0:
-            return
         count_in_progress: int = 0
+        count_completed: int = 0
+        count_pending: int = 0
         for i in self.items:
             if i.status == "in_progress":
                 count_in_progress += 1
-        if count_in_progress != 1:
-            raise ValueError(
-                f"There are {count_in_progress} TODO items in progress. Only one is allowed."
-            )
+            elif i.status == "completed":
+                count_completed += 1
+            elif i.status == "pending":
+                count_pending += 1
+        if count_in_progress == 1 or count_completed == len(self.items):
+            return
+        raise ValueError(
+            f"Invalid TODO state: expected either exactly one item in progress or all items completed. "
+            f"Current status: {count_in_progress} in progress, {count_completed} completed, {count_pending} pending."
+        )
 
 
 class TODOTool(Tool):
@@ -124,23 +130,25 @@ class WriteTODOTool(TODOTool):
 
     def invoke(self, todo_items: list[dict[str, str]]) -> ToolResult:
         self.planning_state.update(todo_items)
-        self.planning_state.rounds_since_update = 0
+        self.planning_state.last_update_round_index = len(self.agent_env["messages"])
         return ToolResult(json_md({"success": True}), self.render_for_user())
 
     def inject(self) -> Optional[str]:
-        if (
-            self.planning_state.rounds_since_update
-            >= self.planning_state.reminder_rounds
-        ):
-            if len(self.planning_state.items) == 0:
-                output = f"REMINDER: You have not created a todo list yet. Create one with `{self.name}` tool if your task is complicated or involves multiple steps."
-            else:
-                output = f"REMINDER: There are {self.planning_state.rounds_since_update} rounds since last plan update. Update your plan with `{self.name}` tool ASAP."
-        else:
-            output = None
+        if self.planning_state.last_update_round_index is None:
+            return f"REMINDER: You have not created a todo list yet. Create one with `{self.name}` tool if your task is complicated or involves multiple steps."
 
-        self.planning_state.rounds_since_update += 1
-        return output
+        if (
+            self.planning_state.last_update_round_index
+            + self.planning_state.reminder_rounds
+            <= len(self.agent_env["messages"])
+        ):
+            delta = (
+                len(self.agent_env["messages"])
+                - self.planning_state.last_update_round_index
+            )
+            return f"REMINDER: There are {delta} rounds since last plan update. Update your plan with `{self.name}` tool ASAP."
+
+        return None
 
 
 class TODOToolsList(ToolsList):

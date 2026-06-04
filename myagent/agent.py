@@ -22,6 +22,7 @@ class Agent:
         self.llm_client: LLMClient = llm_client
         self.send_msg = send_msg
         self.tools_list: ToolsList = tools_list
+
         self.usage: LLMUsage = LLMUsage()
         self.report_usage_every_n_tokens = 1 << 14
         self.report_usage_limit = self.report_usage_every_n_tokens
@@ -87,7 +88,7 @@ class ReActAgent(Agent):
         reasoning_content = response.reasoning_content
         content = response.content
         tool_calls = response.tool_calls
-        self.usage.add(response.usage)
+        self.usage = response.usage
 
         self.logger.log(self.name, {"think": reasoning_content})
         self.logger.log(self.name, {"assistant": content})
@@ -119,19 +120,24 @@ class ReActAgent(Agent):
             try:
                 args = self.tools_list.parse_args(
                     name, tool_call["function"]["arguments"]
-                ).model_dump()
+                )
                 tool_use_obj = {"tool": name, "args": args}
                 self.logger.log(self.name, {"action": tool_use_obj})
                 tool_use_obj_str = shorten(
                     json.dumps(tool_use_obj, indent=4, ensure_ascii=False), 1024
                 )
                 self.send_msg(f"## TOOL USE\n```json\n{tool_use_obj_str}\n```\n")
-                result = self.tools_list.execute_tool(**tool_use_obj)
+                result = self.tools_list.execute_tool(
+                    tool=name,
+                    args=args,
+                    agent_env={"usage": self.usage, "messages": messages},
+                )
                 observation = result.for_agent
                 msg_to_send = result.for_user
             except:
-                observation = [traceback.format_exc()]
-                msg_to_send = None
+                exc_str = traceback.format_exc()
+                observation = [exc_str]
+                msg_to_send = exc_str
             self.logger.log(self.name, {"observation": observation})
             messages_to_append.append(
                 {

@@ -12,14 +12,19 @@ class ToolsList:
     def schema(self) -> list[dict[str, Any]]:
         return [t.schema() for t in self.tools]
 
-    def parse_args(self, name: str, args: str) -> Any:
+    def parse_args(self, name: str, args: str) -> dict[str, Any]:
         for tool in self.tools:
             if name == tool.name:
-                return tool.Parameters.model_validate_json(args)
+                return tool.Parameters.model_validate_json(args).model_dump()
 
         raise ValueError(f'Invalid tool name "{name}"')
 
-    def execute_tool(self, tool: str, args: dict[str, Any]) -> ToolResult:
+    def execute_tool(
+        self, tool: str, args: dict[str, Any], agent_env: dict[str, Any]
+    ) -> ToolResult:
+        for t in self.tools:
+            t.update_agent_env(agent_env)
+
         tool_found: bool = False
         for t in self.tools:
             if tool == t.name:
