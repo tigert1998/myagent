@@ -24,13 +24,13 @@ class PlanItem:
 
 class PlanningState:
     items: list[PlanItem]
-    last_update_round_index: Optional[int]
+    last_update_index: Optional[int]
     reminder_rounds: int
 
     def __init__(self) -> None:
         self.items = []
-        self.last_update_round_index = None
-        self.reminder_rounds = 32
+        self.last_update_index = None
+        self.reminder_rounds = 5
 
     def update(self, todo_items: list[dict[str, str]]) -> None:
         self.items = [
@@ -130,22 +130,22 @@ class WriteTODOTool(TODOTool):
 
     def invoke(self, todo_items: list[dict[str, str]]) -> ToolResult:
         self.planning_state.update(todo_items)
-        self.planning_state.last_update_round_index = len(self.agent_env["messages"])
+        self.planning_state.last_update_index = len(self.agent_env["messages"]) - 1
         return ToolResult(json_md({"success": True}), self.render_for_user())
 
     def inject(self) -> Optional[str]:
-        if self.planning_state.last_update_round_index is None:
+        if self.planning_state.last_update_index is None:
             return f"REMINDER: You have not created a todo list yet. Create one with `{self.name}` tool if your task is complicated or involves multiple steps."
 
-        if (
-            self.planning_state.last_update_round_index
-            + self.planning_state.reminder_rounds
-            <= len(self.agent_env["messages"])
-        ):
-            delta = (
-                len(self.agent_env["messages"])
-                - self.planning_state.last_update_round_index
-            )
+        messages = self.agent_env["messages"]
+        delta = len(
+            [
+                messages[i]
+                for i in range(self.planning_state.last_update_index + 1, len(messages))
+                if messages[i]["role"] == "assistant"
+            ]
+        )
+        if delta >= self.planning_state.reminder_rounds:
             return f"REMINDER: There are {delta} rounds since last plan update. Update your plan with `{self.name}` tool ASAP."
 
         return None
