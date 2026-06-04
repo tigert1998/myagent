@@ -5,7 +5,7 @@ from myagent.tools.basic_tools import (
     BashTool,
     LoadSkillTool,
 )
-from myagent.tools.todo_tools_list import TODOToolsList
+from myagent.tools.todo_tool import WriteTODOTool
 from myagent.tools.tools_list import ConcatToolsList
 
 
@@ -16,5 +16,5 @@ def build_basic_tools_list() -> ConcatToolsList:
         EditFileTool(),
         BashTool(),
         LoadSkillTool(),
-        TODOToolsList(),
+        WriteTODOTool(),
     )

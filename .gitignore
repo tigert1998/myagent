@@ -1,6 +1,6 @@
 .vscode
 config.json
 __pycache__
-logs
 .venv
 .mypy_cache
+.myagent

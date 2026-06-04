@@ -4,7 +4,7 @@ import asyncio
 import argparse
 import traceback
 import os.path as osp
-from time import time
+from datetime import datetime
 from concurrent.futures import Future
 from typing import Any, Optional
 
@@ -12,7 +12,6 @@ import discord
 
 from myagent.agent import ReActAgent
 from myagent.llm_client import LLMClient
-from myagent.loggers import JsonlLogger
 from myagent.tools.build_tools_lists import build_basic_tools_list
 
 
@@ -105,16 +104,15 @@ class DiscordChannel:
                     self.messages_to_session[message_id] = session
 
             try:
-                logger: JsonlLogger = JsonlLogger(
-                    osp.join(self.log_path, f"{message.author.id}-{time():.3f}.jsonl")
-                )
+                time_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                agent_name = f"ReAct-{message.author.name}-{time_str}"
 
                 agent: ReActAgent = ReActAgent(
-                    "ReActAgent",
+                    agent_name,
                     self.llm_client,
                     send_msg,
                     build_basic_tools_list(),
-                    logger,
+                    self.log_path,
                 )
 
                 session.agents = [agent]

@@ -1,13 +1,13 @@
 import argparse
 import json
 import os.path as osp
-from time import time
+from datetime import datetime
 from typing import Any
 
 from myagent.llm_client import LLMClient
 from myagent.tools.build_tools_lists import build_basic_tools_list
 from myagent.agent import ReActAgent
-from myagent.loggers import JsonlLogger, TerminalPrompter
+from myagent.loggers import TerminalPrompter
 
 
 def send_msg(content: str) -> None:
@@ -31,16 +31,15 @@ if __name__ == "__main__":
         config: dict[str, Any] = json.load(f)
     llm_client: LLMClient = LLMClient.build(config["llm"])
 
-    logger: JsonlLogger = JsonlLogger(
-        osp.join(config["channels"]["console"]["log"], f"{time():.3f}.jsonl")
-    )
+    time_str: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    agent_name = f"ReAct-{time_str}"
 
     agent: ReActAgent = ReActAgent(
-        "ReActAgent",
+        agent_name,
         llm_client,
         send_msg,
         build_basic_tools_list(),
-        logger,
+        config["channels"]["console"]["log"],
     )
 
     messages = None
