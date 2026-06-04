@@ -144,6 +144,8 @@ class ReActAgent(Agent):
         if len(tool_calls) == 0:
             self._clear_user_new_msgs(len(user_new_msgs))
             messages = messages + messages_to_append
+            self._mask_tool_results(messages)
+            self._save_messages(messages)
             return messages, content
 
         for tool_call_idx in range(len(tool_calls)):
