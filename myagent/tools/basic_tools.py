@@ -206,7 +206,7 @@ class LoadSkillTool(Tool):
         ls: list[str] = []
         folder: str = osp.expanduser("~/.agents/skills")
         if not osp.isdir(folder):
-            return ""
+            return "Skill list is empty."
         skills: list[str] = os.listdir(folder)
         for skill in skills:
             skill_md_path: str = osp.join(folder, skill, "SKILL.md")

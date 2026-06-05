@@ -57,7 +57,7 @@ class ReActAgent(Agent):
         self.user_new_msgs: list[str] = []
 
     def _mask_tool_results(self, messages: list[dict[str, Any]]) -> None:
-        content_offload_threshold = 512
+        content_size_offload_threshold = 512
         num_tool_calls_to_keep = 2
 
         os.makedirs(f"{self.log_path}/{self.name}/tool_calls", exist_ok=True)
@@ -85,7 +85,8 @@ class ReActAgent(Agent):
         for i in tool_indices:
             tool_call_id = messages[i]["tool_call_id"]
             content = messages[i]["content"]
-            if len(content) >= content_offload_threshold:
+            content_size = len(json.dumps(content, ensure_ascii=False))
+            if content_size >= content_size_offload_threshold:
                 # do not offload short tool call output
                 output_path = osp.abspath(
                     f"{self.log_path}/{self.name}/tool_calls/{tool_call_id}.json"
