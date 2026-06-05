@@ -57,6 +57,9 @@ class ReActAgent(Agent):
         self.user_new_msgs: list[str] = []
 
     def _mask_tool_results(self, messages: list[dict[str, Any]]) -> None:
+        content_offload_threshold = 512
+        num_tool_calls_to_keep = 2
+
         os.makedirs(f"{self.log_path}/{self.name}/tool_calls", exist_ok=True)
         last_mask_index = getattr(self, "last_mask_index", 0)
 
@@ -65,13 +68,15 @@ class ReActAgent(Agent):
             for i in range(last_mask_index + 1, len(messages))
             if messages[i]["role"] == "assistant"
         ]
-        if len(assistant_indices) == 0:
+        if len(assistant_indices) < num_tool_calls_to_keep:
             return
 
-        # keep latest tool call output in context
+        # keep recent tool call output in context
         tool_indices = [
             i
-            for i in range(last_mask_index + 1, assistant_indices[-1])
+            for i in range(
+                last_mask_index + 1, assistant_indices[-num_tool_calls_to_keep]
+            )
             if messages[i]["role"] == "tool"
         ]
         if len(tool_indices) == 0:
@@ -80,12 +85,14 @@ class ReActAgent(Agent):
         for i in tool_indices:
             tool_call_id = messages[i]["tool_call_id"]
             content = messages[i]["content"]
-            output_path = osp.abspath(
-                f"{self.log_path}/{self.name}/tool_calls/{tool_call_id}.json"
-            )
-            with open(output_path, "w") as f:
-                json.dump(content, f, indent=4, ensure_ascii=False)
-            messages[i]["content"] = f'Tool call output saved at "{output_path}"'
+            if len(content) >= content_offload_threshold:
+                # do not offload short tool call output
+                output_path = osp.abspath(
+                    f"{self.log_path}/{self.name}/tool_calls/{tool_call_id}.json"
+                )
+                with open(output_path, "w") as f:
+                    json.dump(content, f, indent=4, ensure_ascii=False)
+                messages[i]["content"] = f'Tool call output saved at "{output_path}"'
 
         self.last_mask_index = max(tool_indices)
 
