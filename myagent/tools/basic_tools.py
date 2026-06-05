@@ -4,7 +4,7 @@ import subprocess
 import signal
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import frontmatter
 
 from myagent.utils import shorten
@@ -123,7 +123,10 @@ class BashTool(Tool):
 
     class Parameters(BaseModel):
         cmd: str
-        timeout: float = 10
+        timeout: float = Field(
+            default=10,
+            description="Timeout in seconds before the command is terminated.",
+        )
 
     def _message_for_user(
         self, stdout: str, stderr: str, returncode: int, comment: Optional[str]
