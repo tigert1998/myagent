@@ -182,9 +182,9 @@ class BashTool(Tool):
         def try_store_output(title, content):
             size_limit = 1 << 16
             if len(content) >= size_limit:
-                file_path = osp.join(
-                    self.agent_env["log_path"], "bash_tool", f"{uuid.uuid4()}.txt"
-                )
+                bash_tool_path = osp.join(self.agent_env["log_path"], "bash_tool")
+                os.makedirs(bash_tool_path, exist_ok=True)
+                file_path = osp.join(bash_tool_path, f"{uuid.uuid4()}.txt")
                 with open(file_path, "w") as f:
                     f.write(content)
                 return {f"{title}_path": file_path}
