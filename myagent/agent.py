@@ -176,7 +176,11 @@ class ReActAgent(Agent):
                 result = self.tools_list.execute_tool(
                     tool=name,
                     args=args,
-                    agent_env={"usage": self.usage, "messages": messages},
+                    agent_env={
+                        "usage": self.usage,
+                        "messages": messages,
+                        "log_path": osp.join(self.log_path, self.name),
+                    },
                 )
                 observation = result.for_agent
                 msg_to_send = result.for_user

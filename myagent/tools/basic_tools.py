@@ -3,6 +3,7 @@ import os.path as osp
 import subprocess
 import signal
 from typing import Optional
+import uuid
 
 from pydantic import BaseModel, Field
 import frontmatter
@@ -175,6 +176,30 @@ class BashTool(Tool):
             + preview("STDERR", stderr, 512)
         )
 
+    def _message_for_agent(
+        self, stdout: str, stderr: str, returncode: int, comment: Optional[str]
+    ) -> str:
+        def try_store_output(title, content):
+            size_limit = 1 << 16
+            if len(content) >= size_limit:
+                file_path = osp.join(
+                    self.agent_env["log_path"], "bash_tool", f"{uuid.uuid4()}.txt"
+                )
+                with open(file_path, "w") as f:
+                    f.write(content)
+                return {f"{title}_path": file_path}
+            else:
+                return {title: content}
+
+        return json_md(
+            {
+                "returncode": returncode,
+                "comment": comment,
+                **try_store_output("stdout", stdout),
+                **try_store_output("stderr", stderr),
+            }
+        )
+
     def invoke(self, cmd: str, timeout: float) -> ToolResult:
         p: subprocess.Popen[str] = subprocess.Popen(
             cmd,
@@ -198,14 +223,7 @@ class BashTool(Tool):
             comment = "timeout"
 
         return ToolResult(
-            json_md(
-                {
-                    "stdout": stdout,
-                    "stderr": stderr,
-                    "returncode": p.returncode,
-                    "comment": comment,
-                }
-            ),
+            self._message_for_agent(stdout, stderr, p.returncode, comment),
             self._message_for_user(stdout, stderr, p.returncode, comment),
         )
 
