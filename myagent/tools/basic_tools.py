@@ -3,6 +3,7 @@ import os.path as osp
 import subprocess
 import signal
 from typing import Optional
+import uuid
 
 from pydantic import BaseModel, Field
 import frontmatter
@@ -26,24 +27,53 @@ class ReadFileTool(Tool):
         limit: int = 2000
 
     def invoke(self, path: str, offset: int, limit: int) -> ToolResult:
-        l: int = int(offset) - 1
-        r: int = l + int(limit)
+        if offset <= 0:
+            raise ValueError("Offset must be a positive integer greater than 0.")
+        if limit <= 0:
+            raise ValueError("Limit must be a positive integer greater than 0.")
+        max_length: int = 1 << 16
         with open(path, "r", encoding="utf-8") as f:
             content: str = f.read()
-            lines: list[str] = content.split("\n")
-            lines = lines[l:r]
-            num_digits = len(str(r))
+        content_lines: list[str] = content.split("\n")
+        l: int = offset - 1
+        if l >= len(content_lines):
             return ToolResult(
-                f"File: {path}\n```\n"
-                + "\n".join(
-                    [
-                        f"{repr(i + l + 1).rjust(num_digits)} | {line}"
-                        for i, line in enumerate(lines)
-                    ]
-                )
-                + "\n```\n",
-                f'Succeed to read "{path}".',
+                "The requested offset exceeds the total number of lines in the file.",
+                f'File "{path}" is empty or offset out of range.',
             )
+        r: int = min(l + limit, len(content_lines))
+
+        lines: list[str] = []
+        length = 0
+        new_line_len = 0
+        for i in range(l, r):
+            truncate = max_length < length + new_line_len + len(content_lines[i])
+            lines.append(content_lines[i][: max_length - length - new_line_len])
+            length += new_line_len + len(lines[-1])
+            new_line_len = 1
+            if length >= max_length:
+                break
+        notices = []
+        if i < r - 1:
+            notices.append(
+                f"Only the first {len(lines)} lines were read because the tool's maximum size limit ({max_length} characters) was reached."
+            )
+        if truncate:
+            notices.append("The last line was truncated due to length limitations.")
+        notice = " ".join(notices)
+
+        num_digits = len(str(i + 1))
+        return ToolResult(
+            f"File: {path}\n```\n"
+            + "\n".join(
+                [
+                    f"{str(i + l + 1).rjust(num_digits)} | {line}"
+                    for i, line in enumerate(lines)
+                ]
+            )
+            + f"\n```\n{notice}",
+            f'Successfully read "{path}".',
+        )
 
 
 class WriteFileTool(Tool):
@@ -60,7 +90,7 @@ class WriteFileTool(Tool):
     def invoke(self, path: str, content: str) -> ToolResult:
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
-        return ToolResult(json_md({"success": True}), f'Succeed to write "{path}".')
+        return ToolResult(json_md({"success": True}), f'Successfully write "{path}".')
 
 
 class EditFileTool(Tool):
@@ -110,7 +140,7 @@ class EditFileTool(Tool):
                     "num_replaces": num_matches,
                 }
             ),
-            f'Succeed to edit "{path}".',
+            f'Successfully edit "{path}".',
         )
 
 
@@ -146,6 +176,30 @@ class BashTool(Tool):
             + preview("STDERR", stderr, 512)
         )
 
+    def _message_for_agent(
+        self, stdout: str, stderr: str, returncode: int, comment: Optional[str]
+    ) -> str:
+        def try_store_output(title, content):
+            size_limit = 1 << 16
+            if len(content) >= size_limit:
+                bash_tool_path = osp.join(self.agent_env["log_path"], "bash_tool")
+                os.makedirs(bash_tool_path, exist_ok=True)
+                file_path = osp.join(bash_tool_path, f"{uuid.uuid4()}.txt")
+                with open(file_path, "w") as f:
+                    f.write(content)
+                return {f"{title}_path": file_path}
+            else:
+                return {title: content}
+
+        return json_md(
+            {
+                "returncode": returncode,
+                "comment": comment,
+                **try_store_output("stdout", stdout),
+                **try_store_output("stderr", stderr),
+            }
+        )
+
     def invoke(self, cmd: str, timeout: float) -> ToolResult:
         p: subprocess.Popen[str] = subprocess.Popen(
             cmd,
@@ -169,14 +223,7 @@ class BashTool(Tool):
             comment = "timeout"
 
         return ToolResult(
-            json_md(
-                {
-                    "stdout": stdout,
-                    "stderr": stderr,
-                    "returncode": p.returncode,
-                    "comment": comment,
-                }
-            ),
+            self._message_for_agent(stdout, stderr, p.returncode, comment),
             self._message_for_user(stdout, stderr, p.returncode, comment),
         )
 
@@ -232,4 +279,4 @@ class LoadSkillTool(Tool):
         with open(skill_md_path, "r") as f:
             md: frontmatter.Post = frontmatter.load(f)
         content: str = _skill_doc_inject_envs(md.content, folder)
-        return ToolResult(content, f'Succeed to load skill "{skill_name}".')
+        return ToolResult(content, f'Successfully load skill "{skill_name}".')
