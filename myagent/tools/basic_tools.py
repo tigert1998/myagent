@@ -179,7 +179,7 @@ class BashTool(Tool):
     def _message_for_agent(
         self, stdout: str, stderr: str, returncode: int, comment: Optional[str]
     ) -> str:
-        def try_store_output(title, content):
+        def try_store_output(title: str, content: str) -> dict[str, str]:
             size_limit = 1 << 16
             if len(content) >= size_limit:
                 bash_tool_path = osp.join(self.agent_env["log_path"], "bash_tool")

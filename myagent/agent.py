@@ -5,7 +5,7 @@ from typing import Any, Optional, Callable
 import threading
 import json
 
-from myagent.utils import shorten
+from myagent.utils import shorten, project_path
 from myagent.tools.tools_list import ToolsList
 from myagent.llm_client import LLMClient, LLMUsage
 from myagent.prompt import load_prompt
@@ -223,7 +223,7 @@ class ReActAgent(Agent):
         prev_messages: Optional[list[dict[str, Any]]] = None,
     ) -> tuple[list[dict[str, Any]], str]:
         if prev_messages is None:
-            react_prompt = load_prompt("prompts/react.md", {})
+            react_prompt = load_prompt(osp.join(project_path(), "prompts/react.md"), {})
             messages: list[dict[str, Any]] = [
                 {
                     "role": "system",
